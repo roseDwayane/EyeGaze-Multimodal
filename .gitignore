@@ -205,3 +205,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 自己的資料
+*.csv
+*.jpg
+*.png
+*.json
+*.pt
+*.pth
+*.bin
+*.safetensors
+
