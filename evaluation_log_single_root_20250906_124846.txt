@@ -1,0 +1,290 @@
+=== 單一ROOT多模態評估開始 ===
+時間: 2025-09-06 12:48:46
+日誌檔案: evaluation_log_single_root_20250906_124846.txt
+裝置: cpu
+要處理的ROOT目錄: ['bgOn_heatmapOn_trajOn']
+要處理的JSON檔案: ['/home/cnelabai/PycharmProjects/EyeGaze-Multimodal/json_textdescription/formal_description_json.json', '/home/cnelabai/PycharmProjects/EyeGaze-Multimodal/json_textdescription/lively_description_json.json', '/home/cnelabai/PycharmProjects/EyeGaze-Multimodal/json_textdescription/mixed_description_json.json']
+================================================================================
+
+============================================================
+Processing ROOT: bgOn_heatmapOn_trajOn
+============================================================
+
+--- Processing formal_description_json.json ---
+Dataset loaded: 4583 samples
+Raw Accuracy: 0.7611
+Correct predictions: 3488/4583
+Errors: 0
+Metrics results saved to bgOn_heatmapOn_trajOn/git_checkpoint/metrics_results_formal_description_json.csv
+Detailed predictions (with sentences) saved to bgOn_heatmapOn_trajOn/git_checkpoint/detailed_predictions_formal_description_json.csv
+
+--- Sample Generated Sentences ---
+Sample 1:
+  Image1: Pair-12-A-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 2:
+  Image1: Pair-12-B-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 3:
+  Image1: Pair-12-Comp-EYE_trial01_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 4:
+  Image1: Pair-12-Coop-EYE_trial01_playerA.jpg
+  Generated: 'competition'
+  Prediction: competition
+  Ground Truth: cooperation
+  Correct: False
+--------------------------------------------------
+Sample 5:
+  Image1: Pair-12-A-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 6:
+  Image1: Pair-12-B-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 7:
+  Image1: Pair-12-Comp-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 8:
+  Image1: Pair-12-Coop-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: cooperation
+  Correct: True
+--------------------------------------------------
+Sample 9:
+  Image1: Pair-12-A-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 10:
+  Image1: Pair-12-B-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+All generated sentences saved to bgOn_heatmapOn_trajOn/git_checkpoint/all_generated_sentences_formal_description_json.txt
+Confusion matrix saved to bgOn_heatmapOn_trajOn/git_checkpoint/confusion_matrix_formal_description_json.png
+
+Detailed Results for formal_description_json.json:
+Accuracy: 0.7611
+Precision: 0.7606
+Recall: 0.7611
+F1-Score: 0.7536
+
+Prediction distribution: {'single': 2273, 'cooperation': 1520, 'competition': 790}
+Ground truth distribution: {'single': 2273, 'cooperation': 1158, 'competition': 1152}
+
+--- Processing lively_description_json.json ---
+Dataset loaded: 4586 samples
+Raw Accuracy: 0.7612
+Correct predictions: 3491/4586
+Errors: 0
+Metrics results saved to bgOn_heatmapOn_trajOn/git_checkpoint/metrics_results_lively_description_json.csv
+Detailed predictions (with sentences) saved to bgOn_heatmapOn_trajOn/git_checkpoint/detailed_predictions_lively_description_json.csv
+
+--- Sample Generated Sentences ---
+Sample 1:
+  Image1: Pair-12-A-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 2:
+  Image1: Pair-12-B-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 3:
+  Image1: Pair-12-Comp-EYE_trial01_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 4:
+  Image1: Pair-12-Coop-EYE_trial01_playerA.jpg
+  Generated: 'competition'
+  Prediction: competition
+  Ground Truth: cooperation
+  Correct: False
+--------------------------------------------------
+Sample 5:
+  Image1: Pair-12-A-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 6:
+  Image1: Pair-12-B-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 7:
+  Image1: Pair-12-Comp-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 8:
+  Image1: Pair-12-Coop-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: cooperation
+  Correct: True
+--------------------------------------------------
+Sample 9:
+  Image1: Pair-12-A-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 10:
+  Image1: Pair-12-B-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+All generated sentences saved to bgOn_heatmapOn_trajOn/git_checkpoint/all_generated_sentences_lively_description_json.txt
+Confusion matrix saved to bgOn_heatmapOn_trajOn/git_checkpoint/confusion_matrix_lively_description_json.png
+
+Detailed Results for lively_description_json.json:
+Accuracy: 0.7612
+Precision: 0.7608
+Recall: 0.7612
+F1-Score: 0.7538
+
+Prediction distribution: {'single': 2274, 'cooperation': 1521, 'competition': 791}
+Ground truth distribution: {'single': 2274, 'cooperation': 1159, 'competition': 1153}
+
+--- Processing mixed_description_json.json ---
+Dataset loaded: 4600 samples
+Raw Accuracy: 0.7611
+Correct predictions: 3501/4600
+Errors: 0
+Metrics results saved to bgOn_heatmapOn_trajOn/git_checkpoint/metrics_results_mixed_description_json.csv
+Detailed predictions (with sentences) saved to bgOn_heatmapOn_trajOn/git_checkpoint/detailed_predictions_mixed_description_json.csv
+
+--- Sample Generated Sentences ---
+Sample 1:
+  Image1: Pair-12-A-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 2:
+  Image1: Pair-12-B-Single-EYE_trial01_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 3:
+  Image1: Pair-12-Comp-EYE_trial01_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 4:
+  Image1: Pair-12-Coop-EYE_trial01_playerA.jpg
+  Generated: 'competition'
+  Prediction: competition
+  Ground Truth: cooperation
+  Correct: False
+--------------------------------------------------
+Sample 5:
+  Image1: Pair-12-A-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 6:
+  Image1: Pair-12-B-Single-EYE_trial02_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 7:
+  Image1: Pair-12-Comp-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: competition
+  Correct: False
+--------------------------------------------------
+Sample 8:
+  Image1: Pair-12-Coop-EYE_trial02_playerA.jpg
+  Generated: 'cooperation'
+  Prediction: cooperation
+  Ground Truth: cooperation
+  Correct: True
+--------------------------------------------------
+Sample 9:
+  Image1: Pair-12-A-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+Sample 10:
+  Image1: Pair-12-B-Single-EYE_trial03_player.jpg
+  Generated: 'single'
+  Prediction: single
+  Ground Truth: single
+  Correct: True
+--------------------------------------------------
+All generated sentences saved to bgOn_heatmapOn_trajOn/git_checkpoint/all_generated_sentences_mixed_description_json.txt
+Confusion matrix saved to bgOn_heatmapOn_trajOn/git_checkpoint/confusion_matrix_mixed_description_json.png
+
+Detailed Results for mixed_description_json.json:
+Accuracy: 0.7611
+Precision: 0.7609
+Recall: 0.7611
+F1-Score: 0.7537
+
+Prediction distribution: {'single': 2280, 'cooperation': 1526, 'competition': 794}
+Ground truth distribution: {'single': 2280, 'competition': 1160, 'cooperation': 1160}
+
+Completed processing for bgOn_heatmapOn_trajOn
+
+=== 所有評估完成 ===
+完成時間: 2025-09-06 14:05:15
+日誌已儲存至: evaluation_log_single_root_20250906_124846.txt

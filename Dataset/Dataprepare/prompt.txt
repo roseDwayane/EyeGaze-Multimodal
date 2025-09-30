@@ -1,0 +1,13 @@
+Please help me add complete docstrings to the following code.
+This project is part of a thesis, with the research topic focusing on eye-tracking data generation and classification using vision-language models. The code is mainly responsible for handling the Data Preparation I/O pipeline.
+
+Use Google Python Style to write the docstrings
+
+Each function must include:
+1. A description of its purpose
+2. Args: parameter names, types, and usage
+3. Returns: the return type and its contents
+
+Do not change the program logic — only add docstrings.
+
+I will paste the code afterward. Please return the entire code with the completed docstrings.

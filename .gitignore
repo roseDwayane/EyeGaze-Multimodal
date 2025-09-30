@@ -215,4 +215,16 @@ __marimo__/
 *.pth
 *.bin
 *.safetensors
-
+*.wandb
+.vscode/
+bgOn_heatmapOn_trajOn/
+bgOn_heatmapOn_trajOff/
+bgOn_heatmapOff_trajOn/
+bgOff_heatmapOn_trajOn/
+bgOff_heatmapOn_trajOff/
+bgOff_heatmapOff_trajOn/
+checkpoints/
+diverse_model_bgOn_heatmapOff_trajOn/
+expanded_eye_gaze_model/
+quick_fundamental_model/
+wandb/
