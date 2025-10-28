@@ -209,6 +209,7 @@ __marimo__/
 # 自己的資料
 
 old/
+.claude/
 *.pt
 *.pth
 *.bin

@@ -1,0 +1,13 @@
+我想寫一隻python程式，把所有的資料全部整理成一個json檔，方便我索引，這個json檔包含以下欄位
+1. "pair": 記錄這筆資料是第幾個pair (總共12~40，18剔除), e.g., 12
+2. "player1": 紀錄第一位玩家的檔名, e.g., Pair-12-A-Single-EYE_trial01_player
+3. "player2":紀錄第二位玩家的檔名, e.g., Pair-12-A-Single-EYE_trial01_observer
+4. "class": 依據檔名給予互動類別(Single, Competition, Cooperation), e.g., Single
+5. "formal_sen": 從正確答案，給予完整的句子, e.g., The answer is 6, appearing 1 time(s), it is single-player mode.
+6. "lively_sen": 從圖形判斷，兩個人的互動過程，給予完整的句子, e.g., The observer's gaze is concentrated on the area containing the target symbol,  indicating successful identification, while the player also focuses accurately on the correct location,  confirming their awareness of the target.
+
+而從player1, 2的檔名中，可以獲取image (jpg file)或EEG (csv file)的原始資料。
+image 原始資料路徑'G:\共用雲端硬碟\CNElab_林佳誼_Gaze\B.GazeImage\01.data\bgOn_heatmapOn_trajOn'；
+EEG原始資料路徑'G:\共用雲端硬碟\CNElab_林佳誼_Gaze\B.GazeImage\01.data\EEGseg'；
+Sentence 資料路徑'G:\共用雲端硬碟\CNElab_林佳誼_Gaze\B.GazeImage\01.data\image_text_descriptions'包含了formal與lively。
+請參考'Data/metadata/generate_json.py'來達成這項任務
