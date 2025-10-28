@@ -1,2 +1,0 @@
-# EyeGaze-Multimodal
-EyeGaze-Multimodal

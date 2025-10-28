@@ -207,10 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 # 自己的資料
-*.csv
-*.jpg
-*.png
-*.json
+
+old/
 *.pt
 *.pth
 *.bin
