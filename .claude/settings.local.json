@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python generate_json.py:*)",
-      "Bash(python verify_metadata.py:*)"
+      "Bash(python verify_metadata.py:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
