@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python generate_json.py:*)",
       "Bash(python verify_metadata.py:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

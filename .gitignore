@@ -216,6 +216,8 @@ old/
 *.safetensors
 *.wandb
 .vscode/
+test_outputs/
+outputs/
 bgOn_heatmapOn_trajOn/
 bgOn_heatmapOn_trajOff/
 bgOn_heatmapOff_trajOn/

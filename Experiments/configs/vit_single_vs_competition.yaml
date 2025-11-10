@@ -3,19 +3,19 @@
 
 # Model Configuration
 model:
-  model_type: "dual"  # "single" or "dual" - dual for concatenated player1+player2
+  model_type: "dual"  # "single" or "dual" - dual for fused player1+player2
   model_name: "google/vit-base-patch16-224"
   num_labels: 3  # Single, Competition, Cooperation
   image_size: 224  # Size for each individual image
   pretrained: true
   freeze_backbone: false
-  concat_mode: "horizontal"  # "horizontal" or "vertical" for dual images
+  concat_mode: "subtract"  # Fusion mode: "horizontal", "vertical", "add", "multiply", "subtract"
 
 # Data Configuration
 data:
   metadata_path: "Data/metadata/complete_metadata.json"
-  image_base_path: "Data/raw/Gaze/example"
-  train_test_split: 0.02  # 2% for test set
+  image_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/bgOn_heatmapOn_trajOn"
+  train_test_split: 0.2  # 2% for test set
   random_seed: 42
 
   # Image preprocessing
@@ -36,7 +36,7 @@ data:
 
 # Training Configuration (Following Hugging Face Trainer)
 training:
-  output_dir: "Experiments/outputs/vit_dual_classification"
+  output_dir: "Experiments/outputs/vit_class_subtract"
   num_train_epochs: 10
   per_device_train_batch_size: 8
   per_device_eval_batch_size: 8
@@ -58,19 +58,19 @@ training:
   greater_is_better: true
 
   # Logging
-  logging_dir: "Experiments/outputs/vit_dual_classification/logs"
+  logging_dir: "Experiments/outputs/vit_class_subtract/logs"
   logging_strategy: "steps"
   logging_steps: 10
-  report_to: ["tensorboard"]
+  report_to: ["wandb"]  # Changed from tensorboard to wandb
 
   # Training optimizations
   fp16: false  # Set to true if GPU supports it
   dataloader_num_workers: 4
   remove_unused_columns: false
 
-  # Early stopping
-  early_stopping_patience: 3
-  early_stopping_threshold: 0.001
+  # Early stopping (DISABLED - training will run for full num_train_epochs)
+  # early_stopping_patience: 3
+  # early_stopping_threshold: 0.001
 
 # Data Augmentation (during training)
 augmentation:
@@ -98,11 +98,23 @@ inference:
 
 # Paths
 paths:
-  checkpoint_dir: "Experiments/outputs/vit_dual_classification/checkpoints"
-  results_dir: "Experiments/outputs/vit_dual_classification/results"
+  checkpoint_dir: "Experiments/outputs/vit_class_subtract/checkpoints"
+  results_dir: "Experiments/outputs/vit_class_subtract/results"
 
 # System
 system:
   seed: 42
   device: "cuda"  # or "cpu"
   num_workers: 4
+
+# Weights & Biases Configuration
+wandb:
+  project: "eyegaze-vit-classification"
+  run_name: null  # Auto-generate if null
+  tags:
+    - "vit"
+    - "dual-image"
+    - "eyegaze"
+    - "single-vs-competition"
+  notes: "ViT training for dual-image eye-gaze classification (Single/Competition/Cooperation)"
+  entity: null  # Set your wandb username/team here if needed

@@ -1,4 +1,14 @@
 """
+prompt:
+以Data/metadata/complete_metadata.json為原始資料，用ViT跑圖片分類，將player1,2 concate起來，訓練過程請完全依照Hugging Face的模型規則，詳細步驟如下：
+1. 把原始json拆成train/test
+	1. dataset = load_dataset("json", data_files="./image_gt.json", split="train")#[:5%]
+	2. datasets = dataset.train_test_split(test_size=0.02)
+2. models/backbones/vit.py：載入 ViTForImageClassification
+3. experiments/configs/vit_single_vs_competition.yaml
+4. experiments/scripts/train_vit.py
+5. metrics/classification.py
+===================================================
 Training script for ViT image classification
 Following Hugging Face Transformers best practices
 """
@@ -17,16 +27,17 @@ from transformers import (
     ViTImageProcessor,
     ViTForImageClassification,
     TrainingArguments,
-    Trainer,
-    EarlyStoppingCallback
+    Trainer
 )
 from typing import Dict, List, Any
 import logging
+import wandb
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from metrics.classification import compute_metrics
+from Data.processed.two_image_fusion import DualImageDataset
 
 # Setup logging
 logging.basicConfig(
@@ -34,86 +45,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
-class DualImageDataset(Dataset):
-    """
-    Dataset for dual-image classification (player1 + player2)
-    Concatenates two images horizontally or vertically
-    """
-
-    def __init__(
-        self,
-        dataset,
-        image_processor: ViTImageProcessor,
-        image_base_path: str,
-        label2id: Dict[str, int],
-        concat_mode: str = "horizontal"
-    ):
-        """
-        Initialize dataset
-
-        Args:
-            dataset: HuggingFace dataset object
-            image_processor: ViT image processor
-            image_base_path: Base path for images
-            label2id: Label to ID mapping
-            concat_mode: "horizontal" or "vertical" concatenation
-        """
-        self.dataset = dataset
-        self.image_processor = image_processor
-        self.image_base_path = Path(image_base_path)
-        self.label2id = label2id
-        self.concat_mode = concat_mode
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        """Get item with concatenated images"""
-        item = self.dataset[idx]
-
-        # Load player1 and player2 images
-        player1_path = self.image_base_path / f"{item['player1']}.jpg"
-        player2_path = self.image_base_path / f"{item['player2']}.jpg"
-
-        try:
-            img1 = Image.open(player1_path).convert('RGB')
-            img2 = Image.open(player2_path).convert('RGB')
-        except Exception as e:
-            logger.error(f"Error loading images for idx {idx}: {e}")
-            # Return a blank image as fallback
-            img1 = Image.new('RGB', (224, 224), color='white')
-            img2 = Image.new('RGB', (224, 224), color='white')
-
-        # Concatenate images
-        if self.concat_mode == "horizontal":
-            # Concatenate horizontally (side by side)
-            total_width = img1.width + img2.width
-            max_height = max(img1.height, img2.height)
-            concatenated = Image.new('RGB', (total_width, max_height))
-            concatenated.paste(img1, (0, 0))
-            concatenated.paste(img2, (img1.width, 0))
-        elif self.concat_mode == "vertical":
-            # Concatenate vertically (top to bottom)
-            max_width = max(img1.width, img2.width)
-            total_height = img1.height + img2.height
-            concatenated = Image.new('RGB', (max_width, total_height))
-            concatenated.paste(img1, (0, 0))
-            concatenated.paste(img2, (0, img1.height))
-        else:
-            raise ValueError(f"Invalid concat_mode: {self.concat_mode}")
-
-        # Process image using ViT processor
-        inputs = self.image_processor(concatenated, return_tensors="pt")
-
-        # Get label
-        label = self.label2id[item['class']]
-
-        return {
-            'pixel_values': inputs['pixel_values'].squeeze(0),
-            'labels': torch.tensor(label, dtype=torch.long)
-        }
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -147,8 +78,7 @@ def prepare_datasets(config: Dict[str, Any]):
 
     split_datasets = datasets.train_test_split(
         test_size=test_size,
-        seed=seed,
-        stratify_by_column='class'  # Stratified split by class
+        seed=seed
     )
 
     logger.info(f"Train samples: {len(split_datasets['train'])}")
@@ -168,8 +98,66 @@ def collate_fn(batch):
     }
 
 
-def main(config_path: str):
-    """Main training function"""
+def get_last_checkpoint(output_dir: str):
+    """
+    Get the last checkpoint from the output directory
+
+    Args:
+        output_dir: Directory to search for checkpoints
+
+    Returns:
+        Path to last checkpoint or None if not found
+    """
+    if not os.path.isdir(output_dir):
+        return None
+
+    checkpoints = [
+        os.path.join(output_dir, d)
+        for d in os.listdir(output_dir)
+        if d.startswith('checkpoint-') and os.path.isdir(os.path.join(output_dir, d))
+    ]
+
+    if not checkpoints:
+        return None
+
+    # Sort by checkpoint number
+    checkpoints.sort(key=lambda x: int(x.split('-')[-1]))
+    return checkpoints[-1]
+
+
+def get_wandb_run_id(checkpoint_path: str):
+    """
+    Extract wandb run_id from checkpoint directory
+
+    Args:
+        checkpoint_path: Path to checkpoint directory
+
+    Returns:
+        wandb run_id or None
+    """
+    trainer_state_file = os.path.join(checkpoint_path, 'trainer_state.json')
+    if os.path.exists(trainer_state_file):
+        try:
+            import json
+            with open(trainer_state_file, 'r') as f:
+                state = json.load(f)
+            # Try to get wandb run_id from log_history
+            if 'log_history' in state and len(state['log_history']) > 0:
+                # Check if wandb run info is stored
+                return None  # Will be handled by wandb auto-resume
+        except:
+            pass
+    return None
+
+
+def main(config_path: str, resume: bool = False, checkpoint_path: str = None):
+    """Main training function
+
+    Args:
+        config_path: Path to config YAML file
+        resume: Whether to resume from last checkpoint
+        checkpoint_path: Specific checkpoint path to resume from (overrides resume)
+    """
 
     # Load configuration
     logger.info(f"Loading configuration from {config_path}")
@@ -179,6 +167,64 @@ def main(config_path: str):
     seed = config['system']['seed']
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+    # Check for existing checkpoint
+    resume_from_checkpoint = None
+    output_dir = config['training']['output_dir']
+
+    if checkpoint_path:
+        # Use specified checkpoint
+        if os.path.isdir(checkpoint_path):
+            resume_from_checkpoint = checkpoint_path
+            logger.info(f"Resuming from specified checkpoint: {checkpoint_path}")
+        else:
+            logger.warning(f"Specified checkpoint not found: {checkpoint_path}")
+    elif resume:
+        # Auto-detect last checkpoint
+        last_checkpoint = get_last_checkpoint(output_dir)
+        if last_checkpoint:
+            resume_from_checkpoint = last_checkpoint
+            logger.info(f"Auto-detected checkpoint: {resume_from_checkpoint}")
+        else:
+            logger.info("No checkpoint found, starting from scratch")
+
+    # Initialize wandb
+    wandb_config = config.get('wandb', {})
+
+    # Try to resume wandb run if resuming training
+    wandb_resume = "allow"  # allow resuming if run_id matches
+    wandb_id = None
+
+    if resume_from_checkpoint:
+        # Try to load wandb run_id from checkpoint
+        wandb_run_path = os.path.join(os.path.dirname(resume_from_checkpoint), 'wandb')
+        if os.path.exists(wandb_run_path):
+            # Find latest run directory
+            run_dirs = [d for d in os.listdir(wandb_run_path) if d.startswith('run-')]
+            if run_dirs:
+                run_dirs.sort()
+                latest_run = run_dirs[-1]
+                wandb_id = latest_run.split('-')[-1]  # Extract run ID
+                wandb_resume = "must"
+                logger.info(f"Resuming wandb run: {wandb_id}")
+
+    wandb.init(
+        project=wandb_config.get('project', 'eyegaze-vit-classification'),
+        name=wandb_config.get('run_name', None),
+        id=wandb_id,
+        resume=wandb_resume,
+        config={
+            'model': config['model'],
+            'training': config['training'],
+            'data': {k: v for k, v in config['data'].items() if k != 'image_base_path'},  # Exclude path
+        },
+        tags=wandb_config.get('tags', ['vit', 'dual-image', 'eyegaze']),
+        notes=wandb_config.get('notes', 'ViT training for dual-image eye-gaze classification'),
+    )
+    logger.info(f"Wandb run initialized: {wandb.run.name}")
+
+    if resume_from_checkpoint:
+        logger.info(f"Training will resume from checkpoint: {resume_from_checkpoint}")
 
     # Prepare datasets
     split_datasets = prepare_datasets(config)
@@ -193,7 +239,7 @@ def main(config_path: str):
     id2label = {int(k): v for k, v in id2label.items()}  # Convert keys to int
 
     # Create PyTorch datasets
-    concat_mode = config['model'].get('concat_mode', 'horizontal')
+    concat_mode = config['model']['concat_mode']
     image_base_path = config['data']['image_base_path']
 
     train_dataset = DualImageDataset(
@@ -204,7 +250,7 @@ def main(config_path: str):
         concat_mode
     )
 
-    test_dataset = DualImageDataset(
+    test_dataset = DualImageDa taset(
         split_datasets['test'],
         image_processor,
         image_base_path,
@@ -214,6 +260,7 @@ def main(config_path: str):
 
     logger.info(f"Train dataset size: {len(train_dataset)}")
     logger.info(f"Test dataset size: {len(test_dataset)}")
+    logger.info(f"concat_mode: {concat_mode}")
 
     # Load model
     logger.info("Loading ViT model...")
@@ -245,7 +292,7 @@ def main(config_path: str):
         weight_decay=training_config['weight_decay'],
         warmup_ratio=training_config['warmup_ratio'],
         lr_scheduler_type=training_config['lr_scheduler_type'],
-        evaluation_strategy=training_config['evaluation_strategy'],
+        eval_strategy=training_config['evaluation_strategy'],  # Changed from evaluation_strategy
         save_strategy=training_config['save_strategy'],
         save_total_limit=training_config['save_total_limit'],
         load_best_model_at_end=training_config['load_best_model_at_end'],
@@ -262,15 +309,9 @@ def main(config_path: str):
         data_seed=seed,
     )
 
-    # Callbacks
+    # Callbacks (Early stopping removed as per user request)
     callbacks = []
-    if 'early_stopping_patience' in training_config:
-        callbacks.append(
-            EarlyStoppingCallback(
-                early_stopping_patience=training_config['early_stopping_patience'],
-                early_stopping_threshold=training_config.get('early_stopping_threshold', 0.0)
-            )
-        )
+    # Note: Early stopping has been disabled to allow full training epochs
 
     # Initialize Trainer
     trainer = Trainer(
@@ -285,7 +326,12 @@ def main(config_path: str):
 
     # Train
     logger.info("Starting training...")
-    train_result = trainer.train()
+    if resume_from_checkpoint:
+        logger.info(f"Resuming training from: {resume_from_checkpoint}")
+        train_result = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    else:
+        logger.info("Starting training from scratch")
+        train_result = trainer.train()
 
     # Save final model
     logger.info("Saving final model...")
@@ -300,6 +346,9 @@ def main(config_path: str):
     for key, value in test_results.items():
         logger.info(f"  {key}: {value}")
 
+    # Log final test results to wandb
+    wandb.log({f"test/{k}": v for k, v in test_results.items()})
+
     # Save results
     results_dir = Path(config['paths']['results_dir'])
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -309,6 +358,10 @@ def main(config_path: str):
             f.write(f"{key}: {value}\n")
 
     logger.info("Training completed!")
+
+    # Finish wandb run
+    wandb.finish()
+    logger.info("Wandb run finished")
 
     return trainer, test_results
 
@@ -321,7 +374,18 @@ if __name__ == "__main__":
         default="Experiments/configs/vit_single_vs_competition.yaml",
         help="Path to configuration file"
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume training from the last checkpoint (auto-detect)"
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Path to specific checkpoint to resume from (overrides --resume)"
+    )
 
     args = parser.parse_args()
 
-    main(args.config)
+    main(args.config, resume=args.resume, checkpoint_path=args.checkpoint)
