@@ -4,16 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an eye-gaze multimodal classification project using Vision Transformers (ViT) to classify dual-image eye-tracking data into three categories:
+This is a multimodal classification project for eye-gaze and EEG signals to classify interaction modes into three categories:
 - **Single**: Single-player mode
 - **Competition**: Competitive mode
 - **Cooperation**: Cooperative mode
 
-The key innovation is fusing player1 and player2 eye-gaze images using various fusion strategies before classification.
+### Two Training Pipelines
+
+1. **Vision Transformer (ViT)**: Fuses player1 and player2 eye-gaze images using various fusion strategies (horizontal/vertical/add/multiply/subtract) before classification.
+
+2. **Dual EEG Transformer (NEW)**: Fuses EEG signals from two players using:
+   - Temporal convolution frontend for downsampling
+   - IBS (Inter-Brain Synchrony) token for cross-brain features
+   - Siamese Transformer encoder with cross-brain attention
+   - Symmetric fusion for permutation-invariant classification
 
 ## Common Commands
 
-### Training
+### Training - Vision Transformer (Eye-Gaze Images)
 
 ```bash
 # Start training from scratch
@@ -27,6 +35,15 @@ python Experiments/scripts/train_vit.py --checkpoint path/to/checkpoint-500
 
 # Verify setup before training
 python Experiments/scripts/verify_setup.py
+```
+
+### Training - Dual EEG Transformer (NEW)
+
+```bash
+# Train dual EEG transformer with IBS token
+python Experiments/scripts/train_art.py --config Experiments/configs/dual_eeg_transformer.yaml
+
+# Monitor training on wandb (URL shown in terminal)
 ```
 
 ### Testing Fusion Modes
@@ -65,7 +82,9 @@ pip install -r requirements.txt
 
 ## Architecture
 
-### Data Pipeline
+### Vision Transformer Pipeline (Eye-Gaze Images)
+
+#### Data Pipeline
 
 1. **Metadata Loading** (`Experiments/scripts/train_vit.py:57-87`)
    - Uses HuggingFace `datasets.load_dataset()` to load JSON metadata
@@ -108,7 +127,82 @@ pip install -r requirements.txt
 - Per-class metrics via `compute_per_class_metrics()`
 - Compatible with HuggingFace Trainer's `compute_metrics` callback
 
+## Dual EEG Transformer Pipeline (NEW)
+
+### Architecture Overview
+
+**File**: `Models/backbones/dual_eeg_transformer.py`
+
+The Dual EEG Transformer processes paired EEG signals with the following stages:
+
+#### 1. Temporal Convolution Frontend (`TemporalConvFrontend`)
+- Input: (B, C, T) raw EEG where C=channels, T=timepoints
+- Multiple Conv1d layers with stride to downsample: T → T̃
+- Output: (B, T̃, d_model) embedded sequences
+
+#### 2. IBS Token Generator (`IBSTokenGenerator`)
+- Computes Inter-Brain Synchrony features from dual EEG
+- Frequency bands: theta, alpha, beta, gamma
+- Features per band:
+  - PLV (Phase Locking Value)
+  - Power correlation
+  - Phase difference
+- Output: (B, d_model) shared IBS token
+
+#### 3. Token Sequence Construction
+- Each player sequence: [CLS, IBS, H₁(1), H₁(2), ..., H₁(T̃)]
+- CLS: Learnable classification token
+- IBS: Shared Inter-Brain Synchrony token
+- H: Temporal conv embeddings
+
+#### 4. Siamese Transformer Encoder
+- Shared weights process both players' sequences
+- Output: Z₁, Z₂ ∈ ℝ^{(T̃+2)×d_model}
+
+#### 5. Cross-Brain Attention (`CrossBrainAttention`)
+- Bidirectional: Z₁ ↔ Z₂
+- Allows information exchange between players
+- Output: Z₁', Z₂' (cross-attended)
+
+#### 6. Symmetric Fusion (`SymmetricFusion`)
+- Extracts CLS tokens: cls₁, cls₂
+- Symmetric operations: add, multiply, abs_diff, concat
+- Ensures f(z₁, z₂) = f(z₂, z₁)
+- Output: f_pair
+
+#### 7. Classification
+- Concatenate: [f_pair, mp₁', mp₂'] where mp=mean pooling
+- MLP classifier → logits
+
+### Loss Functions
+
+**Main loss**: Cross-entropy L_ce
+
+**Optional losses** (disabled by default, enable after baseline converges):
+- Symmetry loss L_sym = ||cls₁ - cls₂||²
+- IBS alignment loss L_ibs (InfoNCE between IBS token and CLS tokens)
+
+Total: L = L_ce + λ_sym·L_sym + λ_ibs·L_ibs
+
+### Data Format
+
+**EEG Files**: CSV format at `Data/raw/EEG/example/`
+- Format: (Channels, Timepoints) or transposed
+- Sampling rate: 250 Hz (configurable)
+- Preprocessing: bandpass filter (1-45 Hz), CAR, z-score normalization
+
+**Windowing**: Sliding window approach
+- window_size: 1000 samples (4 seconds @ 250Hz)
+- stride: 500 samples (2 seconds overlap)
+- Creates multiple training samples per trial
+
+**Dataset**: `Data/processed/dual_eeg_dataset.py`
+- DualEEGDataset class handles loading and preprocessing
+- Automatically creates valid windows from all trials
+
 ## Configuration
+
+### Vision Transformer Config
 
 Main config: `Experiments/configs/vit_single_vs_competition.yaml`
 
@@ -159,7 +253,27 @@ The training script supports robust checkpoint resumption:
 
 Safe to change: `num_train_epochs` (to extend training), logging parameters
 
+### Dual EEG Transformer Config
+
+Main config: `Experiments/configs/dual_eeg_transformer.yaml`
+
+**Key EEG-specific settings**:
+- `model.in_channels`: Number of EEG channels (default: 62)
+- `model.d_model`: Transformer embedding dimension (default: 256)
+- `model.num_layers`: Transformer depth (default: 6)
+- `model.conv_kernel_size`: Temporal conv kernel (default: 25)
+- `model.conv_stride`: Downsampling rate (default: 4)
+- `data.eeg_base_path`: Path to EEG CSV files
+- `data.window_size`: EEG window in samples (default: 1000 = 4s @ 250Hz)
+- `data.stride`: Sliding window stride (default: 500 = 2s overlap)
+- `training.use_sym_loss`: Enable symmetry loss (start with false)
+- `training.use_ibs_loss`: Enable IBS alignment loss (start with false)
+
+**Important**: Start training with only L_ce (cross-entropy), enable optional losses after baseline converges.
+
 ## Experiment Workflow
+
+### Vision Transformer (Eye-Gaze)
 
 Typical experiment iteration:
 
@@ -170,6 +284,17 @@ Typical experiment iteration:
 5. **Monitor on wandb**: Click URL in terminal output
 6. **Compare experiments**: Use wandb dashboard to compare different fusion modes
 
+### Dual EEG Transformer
+
+Typical experiment iteration:
+
+1. **Verify EEG data**: Ensure CSV files exist at `data.eeg_base_path`
+2. **Check channels**: Confirm `model.in_channels` matches your EEG setup
+3. **Baseline training**: Start with default config (only L_ce loss)
+4. **Monitor convergence**: Watch F1 score on validation set
+5. **Enable optional losses**: After baseline converges, try adding L_sym and L_ibs
+6. **Hyperparameter tuning**: Experiment with d_model, num_layers, learning_rate
+
 ## File Organization
 
 ```
@@ -179,31 +304,43 @@ Data/
     generate_json.py             # Script to generate metadata
     verify_metadata.py           # Validation script
   processed/
-    two_image_fusion.py          # DualImageDataset and fusion logic
+    two_image_fusion.py          # DualImageDataset (eye-gaze) and fusion logic
     test_fusion_simple.py        # Visual testing of fusion modes
-  raw/                           # Raw eye-gaze images
+    dual_eeg_dataset.py          # DualEEGDataset (NEW)
+  raw/
+    Gaze/                        # Raw eye-gaze images
+    EEG/example/                 # Raw EEG CSV files (NEW)
 
 Models/
   backbones/
     vit.py                       # ViT model definitions
+    dual_eeg_transformer.py      # Dual EEG Transformer (NEW)
+    art.py                       # Base Transformer components
 
 Experiments/
   configs/
-    vit_single_vs_competition.yaml  # Main training config
+    vit_single_vs_competition.yaml  # Vision Transformer config
+    dual_eeg_transformer.yaml        # Dual EEG Transformer config (NEW)
   scripts/
-    train_vit.py                 # Training script
+    train_vit.py                 # ViT training script
+    train_art.py                 # Dual EEG training script (NEW)
     verify_setup.py              # Pre-training validation
   outputs/
-    vit_class_{mode}/            # Per-experiment outputs
+    vit_class_{mode}/            # ViT outputs by fusion mode
       checkpoint-{N}/            # Saved checkpoints
       logs/                      # Training logs
       wandb/                     # Wandb run data
+    dual_eeg_transformer/        # Dual EEG outputs (NEW)
+      best_model.pt              # Best model checkpoint
+      checkpoint-epoch-{N}.pt    # Periodic checkpoints
 
 metrics/
   classification.py              # Evaluation metrics
 ```
 
 ## Troubleshooting
+
+### Vision Transformer Issues
 
 **CUDA Out of Memory**:
 - Reduce `per_device_train_batch_size` in config (try 4 instead of 8)
@@ -225,6 +362,40 @@ metrics/
 - Increase `num_train_epochs`
 - Enable data augmentation: `augmentation.enabled: true`
 - Adjust learning rate
+
+### Dual EEG Transformer Issues
+
+**CUDA Out of Memory**:
+- Reduce `per_device_train_batch_size` (try 8 or 4)
+- Reduce `model.d_model` (try 128 instead of 256)
+- Reduce `data.window_size` (try 500 instead of 1000)
+
+**EEG File Loading Errors**:
+- Verify CSV files exist at `data.eeg_base_path`
+- Check CSV format: should be (Channels, Timepoints) matrix
+- Ensure player names in metadata match CSV filenames exactly
+- Add `.csv` extension if missing
+
+**No Valid Windows Created**:
+- Check if EEG files are long enough (need > window_size samples)
+- Reduce `data.window_size` or `data.stride`
+- Verify EEG CSV files are not empty or corrupted
+
+**Training Not Converging**:
+- Start with smaller model (d_model=128, num_layers=4)
+- Lower learning rate (try 5e-5)
+- Check data preprocessing (bandpass filter, normalization)
+- Verify labels are correct in metadata
+
+**Channel Mismatch**:
+- Count actual channels in CSV files
+- Update `model.in_channels` to match
+- Ensure all EEG files have same number of channels
+
+**scipy Import Error** (for filtering):
+```bash
+pip install scipy
+```
 
 ## Notes
 

@@ -250,7 +250,7 @@ def main(config_path: str, resume: bool = False, checkpoint_path: str = None):
         concat_mode
     )
 
-    test_dataset = DualImageDa taset(
+    test_dataset = DualImageDataset(
         split_datasets['test'],
         image_processor,
         image_base_path,

@@ -1,0 +1,77 @@
+我現在想要換 fusion EEG signal，用Data/metadata/complete_metadata.json裡面的所有資料，然後使用Model/backbone/art.py的transformer架構，在Experiments/scripts裡面創建train_art.py進行訓練。
+
+至於怎麼把兩個人的EEG fusion起來，方法如下：
+1. 輸入與前處理
+	- 濾波 1–45 Hz，重參考、去偽跡；每窗得到 `X₁, X₂ ∈ ℝ^{C×T}`
+	- **TemporalConv 前端**：對每位玩家各跑 `Conv1d(kernel=K, stride=2 or 4)` ×2～3 層，把 `T → T̃`，並提一個通道嵌入
+	    - 得 `H₁, H₂ ∈ ℝ^{T̃×d}`（把通道在前端卷積裡混合/投影到 d）
+
+2. Token 設計：CLS 與 **IBS（Inter-Brain Synchrony）token**
+	- 每位玩家序列前加 `CLS₁/CLS₂`
+	- **IBS token**（跨腦同步先驗）：在同一窗、對應腦區計算跨腦特徵再投影成一個 token，讓模型「一開始就看到兩人同步度」
+	    - 例：對 `θ/α/β/γ` × ROI 計 **PLV/PLI/功率相關 r**；串成向量 `v_IBS`   
+	    - 線性投影成 `t_IBS ∈ ℝ^{d}`；**插入到雙方序列中**（共享，同一個 token 供兩側讀）
+	
+	序列佈局（以 P₁ 為例）：`[CLS₁, t_IBS, H₁(1), H₁(2), …, H₁(T̃)]`；P₂ 同理。
+
+3. Encoder 與**雙流交互**
+	- **共享** Transformer Encoder（Siamese）：各自得到 `Z₁, Z₂ ∈ ℝ^{(T̃+2)×d}`
+	- 取 `cls₁, cls₂` 與 `mp₁, mp₂`（去掉 CLS/IBS 的均值池化）
+	- **兩步融合**（與 A-3 同精神）：
+	    1. **S-4 對稱算子**：對 `cls₁, cls₂` 產生 `f_pair`
+	    2. **Cross-Attn 雙向交互**：`Z₁ ↔ Z₂` 得 `Z₁', Z₂'` → pool → `[f_pair, mp₁', mp₂'] → z_fuse`
+	
+> 	差異點：這裡的 **IBS token** 在**時序域**中與兩側 token 一起參與注意力，會自動學會「什麼時候該信任跨腦先驗」。
+
+4. 損失與規格外增益
+	- 主損失 `L_ce` 同 A-4
+	- **先驗對齊損失（可選）**：鼓勵 `t_IBS` 與 `Z₁/Z₂` 中與社交互動強相關的 token 聚合
+	    - 例如 InfoNCE：把 `t_IBS` 當 query，正樣本為同窗中兩邊的 `CLS`，負樣本為其他窗的 `CLS`
+	- **對稱性損失** `L_sym` 同上
+	- 總損失：`L = L_ce + λ_sym·L_sym + λ_ib s·L_ib s`（可把後兩項先關掉，基線跑穩再開）
+
+
+---
+
+現在兩種資料型態(Eye Gaze image與EEG signal)，都分別fusion完了，我想基於他們之上做Eye Gaze × EEG 的跨模態融合，用Data/metadata/complete_metadata.json裡面的所有資料，然後使用Model/backbone/vit.py與Model/backbone/art.py的transformer架構，幫我規劃在Experiments/scripts裡面進行訓練。
+
+跨模態融合，可分成三層策略：
+A) **Late Fusion（最穩的第一步）**
+
+- 兩個單模態模型各出一個 logits（或機率），再做：
+    
+    - **加權平均**（權重經驗或驗證集學得）
+        
+    - **Stacking**：把兩個模態的倒數第二層向量 concat，再接一個小 MLP
+        
+- 優點：簡單、好維護、能立刻驗證「跨模態 = 有增益」。
+    
+
+B) **Mid Fusion（建議主模型）**
+
+- 架構：**四塔共享權重**（P₁-Img / P₂-Img / P₁-EEG / P₂-EEG），各自 Encoder→得四個向量或序列，然後：
+    
+    1. **同模態先融合**：
+        
+        - Img：用你既定的 4 算子（Concat/ Sum / AbsDiff / Hadamard）得到 `z_img`
+            
+        - EEG：同理得到 `z_eeg`
+            
+    2. **跨模態交互**：
+        
+        - **雙向交叉注意力 (Cross-Attn)**：`z_img ↔ z_eeg`
+            
+        - 或 **共變量門控**：用 `z_eeg` 產生門控向量門控 `z_img`（反之亦然）
+            
+        - **跨腦同步 token (IBS token)**：把跨腦 PLV/PLI/功率相關等度量壓成一個向量，當作 **learnable token** 插入 Transformer，讓注意力在融合時能直接「看見」同步先驗。
+            
+    3. **融合頭**：Concat(z_img,z_eeg,z_IBS)→ MLP/Transformer Head → 分類。
+        
+
+> 這個 **「同模態用對稱四算子 + IBS token 的跨模態 Cross-Attn」** 是非常清晰且可發表的主線。
+
+C) **Early Fusion（可做為對照）**
+
+- 把 EEG 時頻圖當作「額外通道」，直接與 Eye Gaze image 堆疊後餵入 ViT。
+    
+- 優點：簡單；缺點：模態差異太大時不穩，做為消融對照即可。
