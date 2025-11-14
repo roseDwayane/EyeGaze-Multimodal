@@ -5,7 +5,9 @@
       "Bash(python verify_metadata.py:*)",
       "Bash(python:*)",
       "Bash(findstr:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(timeout 60 python:*)"
     ],
     "deny": [],
     "ask": []

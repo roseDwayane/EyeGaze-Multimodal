@@ -70,6 +70,25 @@ class ViTClassifier(nn.Module):
         outputs = self.model(pixel_values=pixel_values, labels=labels)
         return outputs
 
+    def get_cls_features(self, pixel_values):
+        """
+        Extract CLS token features (without classification head)
+
+        Args:
+            pixel_values: Input images [batch_size, 3, height, width]
+
+        Returns:
+            CLS token hidden states [batch_size, hidden_dim]
+        """
+        # Get hidden states from ViT encoder
+        outputs = self.model.vit(pixel_values=pixel_values, return_dict=True)
+
+        # Extract CLS token (first token in last hidden state)
+        last_hidden_state = outputs.last_hidden_state  # (B, N, D)
+        cls_token = last_hidden_state[:, 0]  # (B, D)
+
+        return cls_token
+
     def get_image_processor(self):
         """Get the image processor for this model"""
         return ViTImageProcessor.from_pretrained(

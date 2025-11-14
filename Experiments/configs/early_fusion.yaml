@@ -1,0 +1,93 @@
+# Early Fusion Configuration: Eye Gaze Image + EEG Signal
+# Converts EEG to spectrogram and stacks with images
+
+# Model Configuration
+model:
+  num_classes: 3
+
+  # ViT config
+  image_size: 224
+  patch_size: 16
+  vit_d_model: 768
+  vit_num_layers: 12
+  vit_num_heads: 12
+
+  # EEG to time-frequency conversion
+  eeg_n_fft: 256
+  eeg_hop_length: 128
+  eeg_n_mels: 64
+  eeg_num_channels: 32
+
+  # Fusion strategy
+  fusion_strategy: "average"  # 'average' (6 channels) or 'concatenate' (12 channels)
+
+  # Pre-trained model
+  image_model_path: null  # Path to pre-trained ViT (optional)
+  freeze_pretrained: false
+
+# Data Configuration
+data:
+  metadata_path: "Data/metadata/complete_metadata.json"
+  image_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/02.fused_heatmap"
+  eeg_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/EEGseg"
+
+  train_test_split: 0.2
+  random_seed: 42
+  max_samples: null  # Set to number for quick testing
+
+  # Image settings
+  image_size: 224
+
+  # EEG settings
+  eeg_window_size: 1024
+  eeg_stride: 512
+  enable_eeg_preprocessing: false
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    "Single": 0
+    "Competition": 1
+    "Cooperation": 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+# Training Configuration
+training:
+  output_dir: "Experiments/outputs/early_fusion"
+  num_train_epochs: 50
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 32
+
+  # Optimization
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  warmup_epochs: 5
+
+  # Saving
+  save_every_n_epochs: 5
+  metric_for_best_model: "f1"
+  greater_is_better: true
+
+  # Logging
+  logging_steps: 10
+  report_to: ["wandb"]
+
+# System
+system:
+  seed: 42
+  device: "cuda"
+  num_workers: 4
+
+# Weights & Biases
+wandb:
+  project: "eyegaze-eeg-classification"
+  run_name: "early-fusion-average"
+  tags:
+    - "early-fusion"
+    - "multimodal"
+    - "eeg-spectrogram"
+  notes: "Early fusion: EEG spectrogram stacked with Eye Gaze images, single ViT encoder"
+  entity: null
