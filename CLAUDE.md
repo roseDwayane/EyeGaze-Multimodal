@@ -42,6 +42,27 @@
 - **空間拼接**：Horizontal / Vertical Concatenation
 - **像素運算**：Add (共同特徵)、Multiply (重疊強化)、Subtract (差異凸顯)
 
+##### 已實作：Early Fusion ViT (Channel Concatenation)
+
+**技術實作**：
+- **框架**: PyTorch + timm (PyTorch Image Models)
+- **模型**: `vit_base_patch16_224` (預訓練 ImageNet-21K)
+- **融合策略**: Channel Concatenation (6-channel input)
+
+**架構流程**：
+```
+img_a (B, 3, 224, 224) ──┐
+                        ├── torch.cat(dim=1) ──► (B, 6, 224, 224) ──► ViT ──► (B, 3)
+img_b (B, 3, 224, 224) ──┘
+```
+
+**關鍵修改 - 6 Channel Patch Embedding**：
+- 原始 ViT 的 `patch_embed.proj` 為 Conv2d(3, 768, 16, 16)
+- 修改為 Conv2d(6, 768, 16, 16)
+- 權重初始化策略：複製原始 3-channel 權重到前後兩組 channels，保留預訓練特徵提取能力
+
+**程式碼位置**: `3_Models/backbones/early_fusion_vit.py`
+
 #### 模組 2｜Dual EEG Transformer 跨腦同步建模
 
 基於 Artifact Removal Transformer 架構改良，專為捕捉雙人神經同步特徵設計。
