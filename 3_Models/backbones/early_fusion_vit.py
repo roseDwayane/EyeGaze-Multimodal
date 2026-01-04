@@ -1,37 +1,53 @@
 """
 Early Fusion Vision Transformer for Dual-stream Gaze Heatmap Classification
 
-This module implements an Early Fusion ViT architecture that concatenates
-two gaze heatmaps (from two players) along the channel dimension before
-feeding them into a pretrained Vision Transformer.
+This module implements an Early Fusion ViT architecture that fuses two gaze
+heatmaps (from two players) before feeding them into a pretrained Vision Transformer.
+
+Supported Fusion Modes:
+    - concat: Channel concatenation (6 channels) - requires modified patch_embed
+    - add: Pixel-wise addition (3 channels) - captures common features
+    - subtract: Pixel-wise subtraction (3 channels) - captures differences
+    - subtract_abs: Absolute difference (3 channels) - captures differences (symmetric)
+    - multiply: Pixel-wise multiplication (3 channels) - captures overlapping regions
 
 Architecture (refer to fig2.GazeArch.png - Section A):
-    Stream 1 (B, 3, H, W) ──┬── Channel Concat ──► (B, 6, H, W) ──► ViT ──► Classification
-    Stream 2 (B, 3, H, W) ──┘
+    Stream 1 (B, 3, H, W) ──┬── Fusion Strategy ──► (B, C, H, W) ──► ViT ──► Classification
+    Stream 2 (B, 3, H, W) ──┘   (C=6 for concat, C=3 for others)
 
 Author: Kung-Yi Chang
 """
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import timm
 from typing import Literal
+
+
+# Supported fusion modes
+FUSION_MODES = Literal['concat', 'add', 'subtract', 'subtract_abs', 'multiply']
 
 
 class EarlyFusionViT(nn.Module):
     """
     Early Fusion Vision Transformer for dual-stream gaze heatmap classification.
 
-    This model performs early fusion by concatenating two RGB heatmaps along
-    the channel dimension, then processes the fused 6-channel input through
-    a pretrained ViT backbone with a modified patch embedding layer.
+    This model performs early fusion using various strategies (concat, add, subtract,
+    multiply) before processing through a pretrained ViT backbone.
 
     Args:
         model_name: Name of the ViT model from timm (default: 'vit_base_patch16_224')
         num_classes: Number of output classes (default: 3 for Single/Competition/Cooperation)
         pretrained: Whether to load pretrained weights (default: True)
         img_size: Input image size (default: 224)
-        weight_init_strategy: Strategy for initializing 6-channel weights
+        fusion_mode: Fusion strategy to use (default: 'concat')
+            - 'concat': Channel concatenation -> 6 channels (requires patch_embed modification)
+            - 'add': (img_a + img_b) / 2 -> 3 channels (common features)
+            - 'subtract': (img_a - img_b) / 2 -> 3 channels (directional difference)
+            - 'subtract_abs': |img_a - img_b| -> 3 channels (symmetric difference)
+            - 'multiply': normalized(img_a * img_b) -> 3 channels (overlapping emphasis)
+        weight_init_strategy: Strategy for initializing 6-channel weights (only for concat mode)
             - 'duplicate': Copy original weights to both channel groups (default)
             - 'average': Use averaged weights for the second channel group
 
@@ -49,16 +65,23 @@ class EarlyFusionViT(nn.Module):
         num_classes: int = 3,
         pretrained: bool = True,
         img_size: int = 224,
+        fusion_mode: FUSION_MODES = 'concat',
         weight_init_strategy: Literal['duplicate', 'average'] = 'duplicate'
     ):
         super().__init__()
 
         self.model_name = model_name
         self.num_classes = num_classes
+        self.fusion_mode = fusion_mode
         self.weight_init_strategy = weight_init_strategy
 
+        # Validate fusion mode
+        valid_modes = ['concat', 'add', 'subtract', 'subtract_abs', 'multiply']
+        if fusion_mode not in valid_modes:
+            raise ValueError(f"fusion_mode must be one of {valid_modes}, got '{fusion_mode}'")
+
         # ================================================================
-        # Step 1: Load pretrained ViT backbone from timm
+        # Load pretrained ViT backbone from timm
         # ================================================================
         self.backbone = timm.create_model(
             model_name,
@@ -68,9 +91,14 @@ class EarlyFusionViT(nn.Module):
         )
 
         # ================================================================
-        # Step 2: Modify patch_embed to accept 6-channel input
+        # Only modify patch_embed for concat mode (6 channels)
+        # Other modes use original 3-channel input (full pretrained weights)
         # ================================================================
-        self._modify_patch_embed_for_6_channels()
+        if fusion_mode == 'concat':
+            self._modify_patch_embed_for_6_channels()
+            print(f"[EarlyFusionViT] fusion_mode='concat' -> 6-channel input")
+        else:
+            print(f"[EarlyFusionViT] fusion_mode='{fusion_mode}' -> 3-channel input (using full pretrained weights)")
 
     def _modify_patch_embed_for_6_channels(self):
         """
@@ -83,24 +111,18 @@ class EarlyFusionViT(nn.Module):
         by leveraging the pretrained 3-channel weights to preserve feature
         extraction capabilities.
         """
-        # Get the original patch embedding projection layer
         original_proj = self.backbone.patch_embed.proj
 
-        # Extract original layer parameters
-        out_channels = original_proj.out_channels      # embed_dim (e.g., 768 for ViT-Base)
-        kernel_size = original_proj.kernel_size        # patch_size (e.g., 16)
-        stride = original_proj.stride                  # typically same as kernel_size
-        padding = original_proj.padding                # typically 0
+        out_channels = original_proj.out_channels
+        kernel_size = original_proj.kernel_size
+        stride = original_proj.stride
+        padding = original_proj.padding
 
-        # Get original weights: shape (out_channels, 3, kernel_h, kernel_w)
         original_weight = original_proj.weight.data.clone()
         original_bias = original_proj.bias.data.clone() if original_proj.bias is not None else None
 
-        # ================================================================
-        # Create new Conv2d layer for 6-channel input
-        # ================================================================
         new_proj = nn.Conv2d(
-            in_channels=6,                             # Modified: 6 channels (concatenated)
+            in_channels=6,
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
@@ -108,47 +130,74 @@ class EarlyFusionViT(nn.Module):
             bias=(original_bias is not None)
         )
 
-        # ================================================================
-        # Initialize new weights using pretrained weights
-        # ================================================================
         with torch.no_grad():
-            # New weight shape: (out_channels, 6, kernel_h, kernel_w)
             new_weight = new_proj.weight.data
 
             if self.weight_init_strategy == 'duplicate':
-                # Strategy: Duplicate original weights for both channel groups
-                # - Channels 0-2 (img_a): Use original pretrained weights
-                # - Channels 3-5 (img_b): Use same pretrained weights (duplicated)
-                new_weight[:, 0:3, :, :] = original_weight  # For img_a channels
-                new_weight[:, 3:6, :, :] = original_weight  # For img_b channels
-
-            elif self.weight_init_strategy == 'average':
-                # Strategy: Original weights for first 3, averaged for last 3
-                # - Channels 0-2: Use original pretrained weights
-                # - Channels 3-5: Use channel-averaged weights (promotes learning differences)
                 new_weight[:, 0:3, :, :] = original_weight
-                # Average across input channels and broadcast back
+                new_weight[:, 3:6, :, :] = original_weight
+            elif self.weight_init_strategy == 'average':
+                new_weight[:, 0:3, :, :] = original_weight
                 avg_weight = original_weight.mean(dim=1, keepdim=True)
                 new_weight[:, 3:6, :, :] = avg_weight.expand_as(original_weight)
 
-            # Copy bias (unchanged, as it's per output channel)
             if original_bias is not None:
                 new_proj.bias.data = original_bias
 
-        # Replace the original projection layer
         self.backbone.patch_embed.proj = new_proj
 
-        # Update the num_features attribute if it exists
-        if hasattr(self.backbone.patch_embed, 'num_features'):
-            # num_features remains the same (embed_dim), only input channels changed
-            pass
+    def _fuse_inputs(self, img_a: torch.Tensor, img_b: torch.Tensor) -> torch.Tensor:
+        """
+        Fuse two input images based on the configured fusion mode.
 
-        print(f"[EarlyFusionViT] Modified patch_embed.proj: "
-              f"in_channels 3 -> 6, weight_init='{self.weight_init_strategy}'")
+        All pixel-wise operations handle value range to maintain compatibility
+        with pretrained ViT expectations (normalized ImageNet distribution).
+
+        Args:
+            img_a: (B, 3, H, W) - normalized image from Player 1
+            img_b: (B, 3, H, W) - normalized image from Player 2
+
+        Returns:
+            fused: (B, C, H, W) where C=6 for concat, C=3 for others
+        """
+        if self.fusion_mode == 'concat':
+            # Channel concatenation: (B, 3, H, W) + (B, 3, H, W) -> (B, 6, H, W)
+            fused = torch.cat([img_a, img_b], dim=1)
+
+        elif self.fusion_mode == 'add':
+            # Addition with scaling to maintain similar value range
+            # (a + b) / 2 keeps values in similar range as original normalized images
+            fused = (img_a + img_b) / 2.0
+
+        elif self.fusion_mode == 'subtract':
+            # Subtraction with scaling
+            # (a - b) / 2 keeps values in similar range, preserves sign (directional)
+            fused = (img_a - img_b) / 2.0
+
+        elif self.fusion_mode == 'subtract_abs':
+            # Absolute difference - symmetric, always positive relative to 0
+            # |a - b| captures magnitude of difference without direction
+            fused = torch.abs(img_a - img_b)
+
+        elif self.fusion_mode == 'multiply':
+            # Multiplication with instance normalization
+            # Product can have very different distribution, so we normalize per-instance
+            product = img_a * img_b  # (B, 3, H, W)
+
+            # Instance normalization: normalize each image in batch independently
+            # This brings values back to roughly zero-mean, unit-variance
+            B, C, H, W = product.shape
+            product_flat = product.view(B, C, -1)  # (B, 3, H*W)
+            mean = product_flat.mean(dim=2, keepdim=True)  # (B, 3, 1)
+            std = product_flat.std(dim=2, keepdim=True) + 1e-6  # (B, 3, 1)
+            normalized = (product_flat - mean) / std
+            fused = normalized.view(B, C, H, W)
+
+        return fused
 
     def forward(self, img_a: torch.Tensor, img_b: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass with early fusion (channel concatenation).
+        Forward pass with early fusion.
 
         Args:
             img_a: Gaze heatmap from Player 1, shape (B, 3, H, W)
@@ -160,26 +209,18 @@ class EarlyFusionViT(nn.Module):
         Dimension Flow:
             img_a:  (B, 3, H, W)
             img_b:  (B, 3, H, W)
-                    ↓ Channel Concatenation
-            fused:  (B, 6, H, W)
-                    ↓ ViT Backbone (modified patch_embed)
+                    | Fusion (mode-dependent)
+                    v
+            fused:  (B, 6, H, W) for concat
+                    (B, 3, H, W) for add/subtract/subtract_abs/multiply
+                    |
+                    v ViT Backbone
             logits: (B, num_classes)
         """
-        # ================================================================
-        # Early Fusion: Concatenate along channel dimension
-        # ================================================================
-        # img_a: (B, 3, H, W) + img_b: (B, 3, H, W) → fused: (B, 6, H, W)
-        fused = torch.cat([img_a, img_b], dim=1)
+        # Fuse inputs based on configured mode
+        fused = self._fuse_inputs(img_a, img_b)
 
-        # ================================================================
         # Forward through ViT backbone
-        # ================================================================
-        # The backbone's forward_features handles:
-        #   1. Patch embedding (now accepts 6 channels)
-        #   2. Add CLS token
-        #   3. Add positional embedding
-        #   4. Transformer encoder blocks
-        #   5. Classification head
         logits = self.backbone(fused)
 
         return logits
@@ -195,11 +236,9 @@ class EarlyFusionViT(nn.Module):
         Returns:
             features: CLS token features, shape (B, embed_dim)
         """
-        fused = torch.cat([img_a, img_b], dim=1)  # (B, 6, H, W)
-        features = self.backbone.forward_features(fused)  # (B, num_patches+1, embed_dim)
-
-        # Extract CLS token (first token)
-        cls_features = features[:, 0]  # (B, embed_dim)
+        fused = self._fuse_inputs(img_a, img_b)
+        features = self.backbone.forward_features(fused)
+        cls_features = features[:, 0]
         return cls_features
 
 
@@ -211,20 +250,17 @@ def create_early_fusion_vit(
     model_name: str = 'vit_base_patch16_224',
     num_classes: int = 3,
     pretrained: bool = True,
+    fusion_mode: str = 'concat',
     **kwargs
 ) -> EarlyFusionViT:
     """
     Factory function to create an Early Fusion ViT model.
 
     Args:
-        model_name: Name of ViT model from timm. Supported models include:
-            - 'vit_base_patch16_224' (default)
-            - 'vit_small_patch16_224'
-            - 'vit_large_patch16_224'
-            - 'vit_base_patch32_224'
-            - 'deit_base_patch16_224' (DeiT variant)
+        model_name: Name of ViT model from timm
         num_classes: Number of output classes
         pretrained: Whether to use pretrained weights
+        fusion_mode: Fusion strategy ('concat', 'add', 'subtract', 'subtract_abs', 'multiply')
         **kwargs: Additional arguments passed to EarlyFusionViT
 
     Returns:
@@ -234,6 +270,7 @@ def create_early_fusion_vit(
         model_name=model_name,
         num_classes=num_classes,
         pretrained=pretrained,
+        fusion_mode=fusion_mode,
         **kwargs
     )
 
@@ -243,44 +280,42 @@ def create_early_fusion_vit(
 # ============================================================================
 
 if __name__ == "__main__":
-    # Test the model
     print("=" * 60)
-    print("Testing EarlyFusionViT")
+    print("Testing EarlyFusionViT with all fusion modes")
     print("=" * 60)
 
-    # Create model
-    model = EarlyFusionViT(
-        model_name='vit_base_patch16_224',
-        num_classes=3,
-        pretrained=True,
-        weight_init_strategy='duplicate'
-    )
+    batch_size = 2
+    img_a = torch.randn(batch_size, 3, 224, 224)
+    img_b = torch.randn(batch_size, 3, 224, 224)
 
-    # Create dummy input
-    batch_size = 4
-    img_a = torch.randn(batch_size, 3, 224, 224)  # Player 1 gaze heatmap
-    img_b = torch.randn(batch_size, 3, 224, 224)  # Player 2 gaze heatmap
+    fusion_modes = ['concat', 'add', 'subtract', 'subtract_abs', 'multiply']
 
-    # Forward pass
-    model.eval()
-    with torch.no_grad():
-        logits = model(img_a, img_b)
-        features = model.get_features(img_a, img_b)
+    for mode in fusion_modes:
+        print(f"\n{'='*40}")
+        print(f"Testing fusion_mode='{mode}'")
+        print(f"{'='*40}")
 
-    print(f"\nInput shapes:")
-    print(f"  img_a: {img_a.shape}")
-    print(f"  img_b: {img_b.shape}")
-    print(f"\nOutput shapes:")
-    print(f"  logits: {logits.shape}")
-    print(f"  features (CLS token): {features.shape}")
+        model = EarlyFusionViT(
+            model_name='vit_base_patch16_224',
+            num_classes=3,
+            pretrained=True,
+            fusion_mode=mode
+        )
 
-    # Verify output
-    assert logits.shape == (batch_size, 3), f"Expected (4, 3), got {logits.shape}"
-    print("\n[OK] All tests passed!")
+        model.eval()
+        with torch.no_grad():
+            logits = model(img_a, img_b)
+            features = model.get_features(img_a, img_b)
 
-    # Model summary
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"\nModel Statistics:")
-    print(f"  Total parameters: {total_params:,}")
-    print(f"  Trainable parameters: {trainable_params:,}")
+        expected_channels = 6 if mode == 'concat' else 3
+        print(f"  Input: img_a {img_a.shape}, img_b {img_b.shape}")
+        print(f"  Fused channels: {expected_channels}")
+        print(f"  Output logits: {logits.shape}")
+        print(f"  Output features: {features.shape}")
+
+        assert logits.shape == (batch_size, 3), f"Expected ({batch_size}, 3), got {logits.shape}"
+        print(f"  [OK] Test passed!")
+
+    print("\n" + "=" * 60)
+    print("[OK] All fusion modes tested successfully!")
+    print("=" * 60)

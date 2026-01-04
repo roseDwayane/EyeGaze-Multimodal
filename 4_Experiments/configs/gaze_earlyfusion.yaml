@@ -7,13 +7,25 @@ model:
   name: "vit_base_patch16_224"
   num_classes: 3
   pretrained: true
+
+  # Fusion mode for dual gaze heatmaps
+  # Options: concat, add, subtract, subtract_abs, multiply
+  #   - concat: Channel concatenation (6 channels) - requires modified patch_embed
+  #   - add: (img_a + img_b) / 2 - captures common features (3 channels)
+  #   - subtract: (img_a - img_b) / 2 - captures directional differences (3 channels)
+  #   - subtract_abs: |img_a - img_b| - captures symmetric differences (3 channels)
+  #   - multiply: normalized(img_a * img_b) - captures overlapping regions (3 channels)
+  fusion_mode: "concat"
+
+  # Only used when fusion_mode="concat"
   weight_init_strategy: "duplicate"  # 6-channel weight initialization
+
   dropout: 0.1
 
 # Data Configuration
 data:
   metadata_path: "1_Data/metadata/complete_metadata.json"
-  image_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/bgOn_heatmapOn_trajOn"
+  image_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/bgOn_heatmapOn_trajOn" # "/home/cnelabai/PycharmProjects/EyeGaze-Multimodal_old/bgOn_heatmapOn_trajOn" on ubuntu
   image_extension: ".jpg"
   image_size: 224
 
@@ -36,12 +48,12 @@ data:
 # Training Configuration
 training:
   epochs: 50
-  batch_size: 16
+  batch_size: 16 #64 on ubuntu
   num_workers: 4
 
   # Optimizer
   optimizer: "adamw"
-  learning_rate: 5.0e-5
+  learning_rate: 5.0e-5 # 2.0e-4 on ubuntu
   weight_decay: 0.01
 
   # LR Scheduler with Warmup

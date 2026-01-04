@@ -370,13 +370,16 @@ def train(config: Dict, resume_path: Optional[str] = None):
     # Model
     # =========================================================================
     print("\n[Train] Creating model...")
+    fusion_mode = config['model'].get('fusion_mode', 'concat')
     model = EarlyFusionViT(
         model_name=config['model']['name'],
         num_classes=config['model']['num_classes'],
         pretrained=config['model']['pretrained'],
-        weight_init_strategy=config['model']['weight_init_strategy']
+        fusion_mode=fusion_mode,
+        weight_init_strategy=config['model'].get('weight_init_strategy', 'duplicate')
     )
     model = model.to(device)
+    print(f"[Train] Fusion mode: {fusion_mode}")
 
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
