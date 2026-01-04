@@ -80,13 +80,13 @@ img_b (B, 3, 224, 224) ──┘                         └── CLS_2 (B, 768
 
 **融合模式與 Linear 層維度對應**：
 
-| fusion_mode | 融合公式                              | Linear 輸入維度 |
-|-------------|---------------------------------------|-----------------|
-| concat      | [CLS_1, CLS_2]                        | 1536 (2D)       |
-| add         | CLS_1 + CLS_2                         | 768 (D)         |
-| subtract    | CLS_1 - CLS_2                         | 768 (D)         |
-| multiply    | CLS_1 * CLS_2                         | 768 (D)         |
-| full        | [concat, subtract, multiply]          | 3072 (4D)       |
+| fusion_mode | 融合公式                         | Linear 輸入維度 |
+| ----------- | ---------------------------- | ----------- |
+| concat      | [CLS_1, CLS_2]               | 1536 (2D)   |
+| add         | CLS_1 + CLS_2                | 768 (D)     |
+| subtract    | CLS_1 - CLS_2                | 768 (D)     |
+| multiply    | CLS_1 * CLS_2                | 768 (D)     |
+| full        | [concat, subtract, multiply] | 3072 (4D)   |
 
 **Siamese 優勢**：
 - 參數效率：單一編碼器處理雙流輸入 (權重共享)
