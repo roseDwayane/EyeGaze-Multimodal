@@ -63,6 +63,38 @@ img_b (B, 3, 224, 224) ──┘
 
 **程式碼位置**: `3_Models/backbones/early_fusion_vit.py`
 
+##### 已實作：Late Fusion ViT (Siamese Network)
+
+**技術實作**：
+- **框架**: PyTorch + timm (PyTorch Image Models)
+- **模型**: `vit_base_patch16_224` (預訓練 ImageNet-21K)
+- **架構**: Siamese Network (共享權重編碼器)
+- **融合策略**: 4 種可配置模式 (concat / add / subtract / multiply / full)
+
+**Siamese 架構流程**：
+```
+img_a (B, 3, 224, 224) ──┐                         ┌── CLS_1 (B, 768) ──┐
+                        ├── Shared ViT Encoder ───┤                    ├── Fusion ──► Linear ──► (B, 3)
+img_b (B, 3, 224, 224) ──┘                         └── CLS_2 (B, 768) ──┘
+```
+
+**融合模式與 Linear 層維度對應**：
+
+| fusion_mode | 融合公式                              | Linear 輸入維度 |
+|-------------|---------------------------------------|-----------------|
+| concat      | [CLS_1, CLS_2]                        | 1536 (2D)       |
+| add         | CLS_1 + CLS_2                         | 768 (D)         |
+| subtract    | CLS_1 - CLS_2                         | 768 (D)         |
+| multiply    | CLS_1 * CLS_2                         | 768 (D)         |
+| full        | [concat, subtract, multiply]          | 3072 (4D)       |
+
+**Siamese 優勢**：
+- 參數效率：單一編碼器處理雙流輸入 (權重共享)
+- 對稱處理：兩輸入以相同方式編碼
+- 特徵對齊：共享表示空間便於後續融合
+
+**程式碼位置**: `3_Models/backbones/late_fusion_vit.py`
+
 #### 模組 2｜Dual EEG Transformer 跨腦同步建模
 
 基於 Artifact Removal Transformer 架構改良，專為捕捉雙人神經同步特徵設計。

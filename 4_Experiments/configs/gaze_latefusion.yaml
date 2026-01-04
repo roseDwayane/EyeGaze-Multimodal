@@ -1,5 +1,5 @@
 # =============================================================================
-# Early Fusion ViT - Gaze Heatmap Classification
+# Late Fusion ViT - Gaze Heatmap Classification
 # =============================================================================
 
 # Model Configuration
@@ -8,18 +8,16 @@ model:
   num_classes: 3
   pretrained: true
 
-  # Fusion mode for dual gaze heatmaps
-  # Options: concat, add, subtract, subtract_abs, multiply
-  #   - concat: Channel concatenation (6 channels) - requires modified patch_embed
-  #   - add: (img_a + img_b) / 2 - captures common features (3 channels)
-  #   - subtract: (img_a - img_b) / 2 - captures directional differences (3 channels)
-  #   - subtract_abs: |img_a - img_b| - captures symmetric differences (3 channels)
-  #   - multiply: normalized(img_a * img_b) - captures overlapping regions (3 channels)
-  fusion_mode: "concat"
+  # Fusion mode for CLS token features
+  # Options: concat, add, subtract, multiply, full
+  #   - concat: [CLS_1, CLS_2] -> 2D dimensions (1536)
+  #   - add: CLS_1 + CLS_2 -> D dimensions (768)
+  #   - subtract: CLS_1 - CLS_2 -> D dimensions (768)
+  #   - multiply: CLS_1 * CLS_2 -> D dimensions (768)
+  #   - full: [concat, subtract, multiply] -> 4D dimensions (3072)
+  fusion_mode: "full"
 
-  # Only used when fusion_mode="concat"
-  weight_init_strategy: "duplicate"  # 6-channel weight initialization
-
+  # Dropout before classification head
   dropout: 0.1
 
 # Data Configuration
@@ -62,7 +60,6 @@ training:
 
   # Class imbalance handling
   use_weighted_loss: true
-  # Weights will be computed from training data distribution
 
   # Mixed precision
   fp16: true
@@ -73,7 +70,7 @@ training:
 # Checkpoint Configuration
 checkpoint:
   # Note: actual save path = save_dir/{fusion_mode}/
-  save_dir: "4_Experiments/runs/gaze_earlyfusion"
+  save_dir: "4_Experiments/runs/gaze_latefusion"
   save_every_epochs: 10
   save_best: true
   metric_for_best: "val_f1"
@@ -82,14 +79,13 @@ checkpoint:
 # Resume Training
 resume:
   enabled: false
-  checkpoint_path: null  # Set path to resume from specific checkpoint
+  checkpoint_path: null
 
 # Data Augmentation
 augmentation:
   train:
     random_horizontal_flip: 0.5
   val:
-    # No augmentation for validation
     pass: true
 
 # Evaluation
@@ -107,17 +103,17 @@ wandb:
   enabled: true
   project: "Multimodal_Gaze"
   # Note: actual run_name = {run_name}_{fusion_mode}_{timestamp}
-  run_name: "early_fusion_vit"
+  run_name: "late_fusion_vit"
   tags:
-    - "early-fusion"
+    - "late-fusion"
     - "vit"
     - "gaze"
-    - "channel-concat"
-  notes: "Early Fusion ViT with 6-channel input (dual gaze heatmap concatenation)"
-  log_model: false  # Don't upload checkpoints to wandb
+    - "siamese"
+  notes: "Late Fusion ViT with shared encoder (Siamese) and feature-level fusion"
+  log_model: false
 
 # System
 system:
   seed: 42
   device: "cuda"
-  deterministic: false  # Set true for reproducibility (slower)
+  deterministic: false

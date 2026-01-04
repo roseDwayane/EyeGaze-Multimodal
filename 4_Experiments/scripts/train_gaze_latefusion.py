@@ -1,8 +1,11 @@
 """
-Training Script for Early Fusion ViT - Gaze Heatmap Classification
+Training Script for Late Fusion ViT - Gaze Heatmap Classification
 
-This script trains the EarlyFusionViT model on dual gaze heatmap data
+This script trains the LateFusionViT model on dual gaze heatmap data
 for social interaction classification (Single/Competition/Cooperation).
+
+The Late Fusion approach uses a shared ViT encoder (Siamese architecture)
+to process both streams, then fuses the CLS token features at decision level.
 
 Features:
     - Weights & Biases logging
@@ -12,9 +15,9 @@ Features:
     - Mixed precision training (FP16)
 
 Usage:
-    python 4_Experiments/scripts/train_gaze_earlyfusion.py
-    python 4_Experiments/scripts/train_gaze_earlyfusion.py --config path/to/config.yaml
-    python 4_Experiments/scripts/train_gaze_earlyfusion.py --resume path/to/checkpoint.pt
+    python 4_Experiments/scripts/train_gaze_latefusion.py
+    python 4_Experiments/scripts/train_gaze_latefusion.py --config path/to/config.yaml
+    python 4_Experiments/scripts/train_gaze_latefusion.py --resume path/to/checkpoint.pt
 """
 
 import sys
@@ -46,7 +49,6 @@ def import_module_from_path(module_name: str, file_path: str):
     """Import a module from a file path and register it in sys.modules."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
-    # Register in sys.modules so pickle can find it in worker processes
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
@@ -61,10 +63,10 @@ custom_collate_fn = _dataset_module.custom_collate_fn
 
 # Import model module
 _model_module = import_module_from_path(
-    "early_fusion_vit",
-    str(PROJECT_ROOT / "3_Models" / "backbones" / "early_fusion_vit.py")
+    "late_fusion_vit",
+    str(PROJECT_ROOT / "3_Models" / "backbones" / "late_fusion_vit.py")
 )
-EarlyFusionViT = _model_module.EarlyFusionViT
+LateFusionViT = _model_module.LateFusionViT
 
 # Optional: wandb
 try:
@@ -108,10 +110,8 @@ def get_linear_warmup_cosine_scheduler(optimizer, warmup_epochs: int, total_epoc
 
     def lr_lambda(current_step):
         if current_step < warmup_steps:
-            # Linear warmup
             return float(current_step) / float(max(1, warmup_steps))
         else:
-            # Cosine annealing
             progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
             return max(0.0, 0.5 * (1.0 + np.cos(np.pi * progress)))
 
@@ -119,12 +119,7 @@ def get_linear_warmup_cosine_scheduler(optimizer, warmup_epochs: int, total_epoc
 
 
 def compute_metrics(preds: np.ndarray, labels: np.ndarray, class_names: list) -> Dict:
-    """
-    Compute classification metrics.
-
-    Returns:
-        Dictionary containing accuracy, precision, recall, f1, and confusion matrix
-    """
+    """Compute classification metrics."""
     accuracy = accuracy_score(labels, preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels, preds, average='macro', zero_division=0
@@ -214,7 +209,6 @@ def train_one_epoch(
 
         optimizer.zero_grad()
 
-        # Mixed precision forward pass
         if use_amp:
             with autocast('cuda'):
                 logits = model(img_a, img_b)
@@ -222,7 +216,6 @@ def train_one_epoch(
 
             scaler.scale(loss).backward()
 
-            # Gradient clipping
             if config['training'].get('max_grad_norm'):
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(
@@ -245,11 +238,9 @@ def train_one_epoch(
 
             optimizer.step()
 
-        # Update scheduler (step-wise)
         if scheduler:
             scheduler.step()
 
-        # Collect predictions
         preds = logits.argmax(dim=1).cpu().numpy()
         all_preds.extend(preds)
         all_labels.extend(labels.cpu().numpy())
@@ -257,13 +248,11 @@ def train_one_epoch(
         total_loss += loss.item()
         avg_loss = total_loss / (batch_idx + 1)
 
-        # Update progress bar
         pbar.set_postfix({
             'loss': f'{avg_loss:.4f}',
             'lr': f'{optimizer.param_groups[0]["lr"]:.2e}'
         })
 
-    # Compute epoch metrics
     metrics = compute_metrics(
         np.array(all_preds),
         np.array(all_labels),
@@ -309,7 +298,6 @@ def validate(
         all_labels.extend(labels.cpu().numpy())
         total_loss += loss.item()
 
-    # Compute metrics
     metrics = compute_metrics(
         np.array(all_preds),
         np.array(all_labels),
@@ -323,15 +311,13 @@ def validate(
 def train(config: Dict, resume_path: Optional[str] = None):
     """Main training function."""
 
-    # Set seed
     set_seed(config['system']['seed'])
 
-    # Device
     device = torch.device(config['system']['device'] if torch.cuda.is_available() else 'cpu')
     print(f"[Train] Using device: {device}")
 
     # Get fusion_mode for dynamic paths
-    fusion_mode = config['model'].get('fusion_mode', 'concat')
+    fusion_mode = config['model'].get('fusion_mode', 'full')
 
     # Create output directory (append fusion_mode)
     save_dir = Path(config['checkpoint']['save_dir']) / fusion_mode
@@ -370,27 +356,26 @@ def train(config: Dict, resume_path: Optional[str] = None):
     )
 
     # =========================================================================
-    # Model
+    # Model - Late Fusion ViT
     # =========================================================================
-    print("\n[Train] Creating model...")
-    model = EarlyFusionViT(
+    print("\n[Train] Creating Late Fusion ViT model...")
+    model = LateFusionViT(
         model_name=config['model']['name'],
         num_classes=config['model']['num_classes'],
         pretrained=config['model']['pretrained'],
         fusion_mode=fusion_mode,
-        weight_init_strategy=config['model'].get('weight_init_strategy', 'duplicate')
+        dropout=config['model'].get('dropout', 0.1)
     )
     model = model.to(device)
     print(f"[Train] Fusion mode: {fusion_mode}")
 
-    # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Train] Total parameters: {total_params:,}")
     print(f"[Train] Trainable parameters: {trainable_params:,}")
 
     # =========================================================================
-    # Loss (with class weights)
+    # Loss
     # =========================================================================
     if config['training'].get('use_weighted_loss', False):
         class_weights = train_dataset.get_class_weights().to(device)
@@ -409,7 +394,7 @@ def train(config: Dict, resume_path: Optional[str] = None):
     )
 
     # =========================================================================
-    # Scheduler (Warmup + Cosine)
+    # Scheduler
     # =========================================================================
     steps_per_epoch = len(train_loader)
     scheduler = get_linear_warmup_cosine_scheduler(
@@ -427,7 +412,7 @@ def train(config: Dict, resume_path: Optional[str] = None):
     print(f"[Train] Mixed precision (FP16): {use_amp}")
 
     # =========================================================================
-    # Resume from checkpoint
+    # Resume
     # =========================================================================
     start_epoch = 0
     best_metric = 0.0
@@ -439,7 +424,7 @@ def train(config: Dict, resume_path: Optional[str] = None):
             start_epoch, best_metric = load_checkpoint(
                 ckpt_path, model, optimizer, scheduler, scaler
             )
-            start_epoch += 1  # Start from next epoch
+            start_epoch += 1
             print(f"[Train] Resuming from epoch {start_epoch}, best_metric: {best_metric:.4f}")
 
     # =========================================================================
@@ -462,7 +447,7 @@ def train(config: Dict, resume_path: Optional[str] = None):
     # Training Loop
     # =========================================================================
     print("\n" + "=" * 60)
-    print("Starting Training")
+    print("Starting Late Fusion ViT Training")
     print("=" * 60)
 
     metric_for_best = config['checkpoint'].get('metric_for_best', 'val_f1')
@@ -473,7 +458,6 @@ def train(config: Dict, resume_path: Optional[str] = None):
         print(f"Epoch {epoch + 1}/{config['training']['epochs']}")
         print(f"{'='*60}")
 
-        # Train
         train_metrics = train_one_epoch(
             model, train_loader, criterion, optimizer, scheduler,
             scaler, device, epoch, config, use_amp
@@ -483,18 +467,15 @@ def train(config: Dict, resume_path: Optional[str] = None):
               f"Acc: {train_metrics['accuracy']:.4f}, "
               f"F1: {train_metrics['f1']:.4f}")
 
-        # Validate
         val_metrics = validate(model, val_loader, criterion, device, config, use_amp)
 
         print(f"[Val]   Loss: {val_metrics['loss']:.4f}, "
               f"Acc: {val_metrics['accuracy']:.4f}, "
               f"F1: {val_metrics['f1']:.4f}")
 
-        # Print confusion matrix
         print(f"\n[Val] Confusion Matrix:")
         print(val_metrics['confusion_matrix'])
 
-        # Check if best model
         current_metric = val_metrics[metric_for_best.replace('val_', '')]
         if greater_is_better:
             is_best = current_metric > best_metric
@@ -505,7 +486,6 @@ def train(config: Dict, resume_path: Optional[str] = None):
             best_metric = current_metric
             print(f"[Train] New best {metric_for_best}: {best_metric:.4f}")
 
-        # Save checkpoint
         if config['checkpoint'].get('save_best', True) and is_best:
             save_checkpoint(
                 model, optimizer, scheduler, scaler, epoch, best_metric, config,
@@ -520,7 +500,6 @@ def train(config: Dict, resume_path: Optional[str] = None):
             )
             print(f"[Train] Saved checkpoint at epoch {epoch + 1}")
 
-        # Wandb logging
         if WANDB_AVAILABLE and config['wandb'].get('enabled', False):
             log_dict = {
                 'epoch': epoch + 1,
@@ -536,18 +515,6 @@ def train(config: Dict, resume_path: Optional[str] = None):
             }
             wandb.log(log_dict)
 
-            # Log confusion matrix as table
-            if (epoch + 1) % 5 == 0:  # Every 5 epochs
-                class_names = config['data']['class_names']
-                wandb.log({
-                    'val/confusion_matrix': wandb.plot.confusion_matrix(
-                        probs=None,
-                        y_true=list(range(len(class_names))),
-                        preds=list(range(len(class_names))),
-                        class_names=class_names
-                    )
-                })
-
     # =========================================================================
     # Final
     # =========================================================================
@@ -556,7 +523,6 @@ def train(config: Dict, resume_path: Optional[str] = None):
     print(f"Best {metric_for_best}: {best_metric:.4f}")
     print("=" * 60)
 
-    # Save final checkpoint
     save_checkpoint(
         model, optimizer, scheduler, scaler,
         config['training']['epochs'] - 1, best_metric, config,
@@ -568,11 +534,11 @@ def train(config: Dict, resume_path: Optional[str] = None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Train Early Fusion ViT')
+    parser = argparse.ArgumentParser(description='Train Late Fusion ViT')
     parser.add_argument(
         '--config',
         type=str,
-        default='4_Experiments/configs/gaze_earlyfusion.yaml',
+        default='4_Experiments/configs/gaze_latefusion.yaml',
         help='Path to config file'
     )
     parser.add_argument(
@@ -583,12 +549,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load config
     config_path = PROJECT_ROOT / args.config
     print(f"[Train] Loading config from: {config_path}")
     config = load_config(config_path)
 
-    # Train
     train(config, resume_path=args.resume)
 
 
