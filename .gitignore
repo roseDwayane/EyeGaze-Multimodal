@@ -210,6 +210,10 @@ __marimo__/
 
 old/
 .claude/
+.obsidian/
+0_Prompts/
+8_Manuscript/
+runs/
 *.pt
 *.pth
 *.bin
