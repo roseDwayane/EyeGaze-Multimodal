@@ -213,6 +213,7 @@ class DualEEGDataset(Dataset):
                 'eeg1': eeg1_tensor,
                 'eeg2': eeg2_tensor,
                 'labels': label_tensor,
+                'dataset_idx': window_info['dataset_idx'],
                 'player1': window_info['player1'],
                 'player2': window_info['player2'],
                 'class': window_info['class']
@@ -237,11 +238,13 @@ def collate_fn(batch):
     eeg1 = torch.stack([item['eeg1'] for item in batch])  # (B, C, T)
     eeg2 = torch.stack([item['eeg2'] for item in batch])  # (B, C, T)
     labels = torch.stack([item['labels'] for item in batch])  # (B,)
+    dataset_idx = [item['dataset_idx'] for item in batch]  # List of integers
 
     return {
         'eeg1': eeg1,
         'eeg2': eeg2,
-        'labels': labels
+        'labels': labels,
+        'dataset_idx': dataset_idx
     }
 
 
