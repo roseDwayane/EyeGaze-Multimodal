@@ -228,9 +228,15 @@ bgOn_heatmapOff_trajOn/
 bgOff_heatmapOn_trajOn/
 bgOff_heatmapOn_trajOff/
 bgOff_heatmapOff_trajOn/
+EEGseg/
+EEGseg_preprocessed/
 checkpoints/
 diverse_model_bgOn_heatmapOff_trajOn/
 expanded_eye_gaze_model/
 quick_fundamental_model/
 wandb/
+raw_result/
+figures/
+tables/
 raw/
+

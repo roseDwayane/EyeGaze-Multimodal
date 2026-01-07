@@ -1,0 +1,189 @@
+# =============================================================================
+# HyperEEG Encoder - Hyperscanning EEG Classification
+# =============================================================================
+# This config supports ablation studies via the ablation_mode parameter.
+# Available modes: full, baseline, no_sinc, no_graph, no_cross, no_uncertainty
+
+# Model Configuration
+model:
+  name: "HyperEEG_Encoder"
+  num_classes: 3
+
+  # Ablation mode - determines which components are enabled
+  # Options:
+  #   - full: All components enabled (SincConv + Graph + CrossAttn + Uncertainty)
+  #   - baseline: All components disabled (Conv1d + Linear + Concat + Average)
+  #   - no_sinc: Full model without SincConv
+  #   - no_graph: Full model without Graph Attention
+  #   - no_cross: Full model without Cross-Attention
+  #   - no_uncertainty: Full model without Uncertainty Fusion
+  #   - sinc_only, graph_only, cross_only, uncertainty_only: Single component tests
+  ablation_mode: "full"
+
+  # Architecture parameters
+  in_channels: 32           # Number of EEG channels
+  in_timepoints: 1024       # Timepoints per segment
+  embed_dim: 128            # Feature embedding dimension
+  num_heads: 4              # Attention heads
+  dropout: 0.2              # Dropout rate
+
+  # SincConv parameters (M1)
+  sample_rate: 250          # EEG sampling rate (Hz)
+  sinc_kernel_size: 125     # Sinc filter kernel size
+
+  # Manual ablation switches (override ablation_mode if set)
+  # Uncomment to manually control each component:
+  # use_sinc: true
+  # use_graph: true
+  # use_cross_attn: true
+  # use_uncertainty: true
+
+# Data Configuration
+data:
+  # =========================================================================
+  # Preprocessed Data (RECOMMENDED - 10x faster training)
+  # =========================================================================
+  # Run preprocessing first:
+  #   python 2_Preprocessing/scripts/preprocess_eeg_windows.py
+  # Then set use_preprocessed: true
+  use_preprocessed: true
+  preprocessed_dir: "1_Data/datasets/EEGseg_preprocessed"
+  load_to_memory: true      # Load all data into RAM (requires ~10GB RAM)
+
+  # =========================================================================
+  # Raw Data (fallback if use_preprocessed: false)
+  # =========================================================================
+  metadata_path: "1_Data/metadata/complete_metadata.json"
+  eeg_base_path: "1_Data/datasets/EEGseg"  # Local path
+
+  # EEG parameters
+  window_size: 1024         # Timepoints per window
+  stride: 256               # Sliding window stride (75% overlap)
+  sampling_rate: 250        # EEG sampling rate (Hz)
+  num_channels: 32          # Number of EEG channels
+
+  # Preprocessing (only used when use_preprocessed: false)
+  enable_preprocessing: true
+  filter_low: 0.5           # High-pass filter cutoff (Hz)
+  filter_high: 50.0         # Low-pass filter cutoff (Hz)
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    Single: 0
+    Competition: 1
+    Cooperation: 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+  # Train/Val split - Fixed by Pair
+  split_by: "pair"
+  val_pairs: [33, 34, 35, 36, 37, 38, 39, 40]  # 8 pairs for validation
+  seed: 42
+
+# Training Configuration
+training:
+  epochs: 50
+  batch_size: 128           # Increased for RTX 4070 12GB (was 64)
+
+  # DataLoader optimization
+  num_workers: 0            # Set to 0 for Windows compatibility with large in-memory datasets
+  prefetch_factor: 2        # Prefetch factor (ignored when num_workers=0)
+  persistent_workers: false # Must be false when num_workers=0
+
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 5.0e-4
+  weight_decay: 0.01
+
+  # LR Scheduler with Warmup
+  scheduler: "cosine"
+  warmup_epochs: 10
+
+  # Class imbalance handling
+  use_weighted_loss: true
+
+  # Mixed precision
+  fp16: true
+
+  # Gradient clipping
+  max_grad_norm: 1.0
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 15
+    min_delta: 0.001
+
+# Checkpoint Configuration
+checkpoint:
+  # Note: actual save path = save_dir/{ablation_mode}/
+  save_dir: "4_Experiments/runs/eeg_hypereeg"
+  save_every_epochs: 10
+  save_best: true
+  metric_for_best: "val_f1"
+  greater_is_better: true
+
+# Resume Training
+resume:
+  enabled: false
+  checkpoint_path: null
+
+# Data Augmentation (EEG-specific)
+augmentation:
+  train:
+    # Time masking (mask random time segments)
+    time_mask:
+      enabled: true
+      max_mask_length: 50    # Max consecutive timepoints to mask
+      num_masks: 2            # Number of masks per sample
+
+    # Channel dropout (randomly drop channels)
+    channel_dropout:
+      enabled: true
+      dropout_prob: 0.15       # Probability of dropping each channel
+
+    # Gaussian noise
+    gaussian_noise:
+      enabled: true
+      std: 0.05                # Standard deviation of noise
+
+    # Time shift
+    time_shift:
+      enabled: false
+      max_shift: 50           # Max shift in timepoints
+
+  val:
+    # No augmentation for validation
+    pass: true
+
+# Evaluation
+evaluation:
+  eval_every_epochs: 1
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+
+# Weights & Biases
+wandb:
+  enabled: true
+  project: "Multimodal_EEG"
+  run_name: "hypereeg"
+  tags:
+    - "hypereeg"
+    - "hyperscanning"
+    - "dual-eeg"
+    - "social-interaction"
+  notes: "HyperEEG Encoder for hyperscanning EEG social interaction classification"
+  log_model: false
+
+# System
+system:
+  seed: 42
+  device: "cuda"
+  deterministic: false

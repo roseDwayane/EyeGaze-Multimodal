@@ -12,12 +12,17 @@ def update_config(config_path, fusion_mode):
 
     # Regex to find fusion_mode: "..." or fusion_mode: '...' or fusion_mode: ...
     # This pattern assumes fusion_mode is on its own line or at least clearly defined.
-    # based on the file content I saw:   fusion_mode: "concat"
-    pattern = r'(fusion_mode:\s*)(["\\]?)([^"\\]+\b)(["\\]?)'
+    # Group 1: 'fusion_mode: ' (and whitespace)
+    # Group 2: Opening quote (optional)
+    # Group 3: The value (until closing quote or boundary)
+    # Group 4: Closing quote (optional)
+    pattern = r'(fusion_mode:\s*)(["\']?)([^"\\]+\b)(["\']?)'
     
-    # Replacement function to ensure we keep quotes if they exist, or add them if we want to be safe
-    # The user's file uses double quotes: fusion_mode: "concat"
-    new_content = re.sub(pattern, f'\1"{fusion_mode}"', content)
+    # Replacement string: Group 1 content + " + new_mode + "
+    # We use r'\g<1>' to refer to group 1 safely.
+    replacement = r'\g<1>"' + fusion_mode + '"'
+    
+    new_content = re.sub(pattern, replacement, content)
 
     with open(config_path, 'w', encoding='utf-8') as f:
         f.write(new_content)
