@@ -182,6 +182,163 @@ python 4_Experiments/scripts/train_gaze_latefusion.py --resume 4_Experiments/run
 
 - [x] **EXP-001**: Early Fusion ViT (channel concatenation)
 - [x] **EXP-002**: Late Fusion ViT (Siamese encoder + feature fusion)
-- [ ] **EXP-003**: Spatial Concatenation (Horizontal/Vertical)
-- [ ] **EXP-004**: Pixel-wise operations (Add/Multiply/Subtract)
-- [ ] **EXP-005**: Different ViT variants (vit_small, vit_large, DeiT)
+- [x] **EXP-003**: HyperEEG Encoder (Ablation Studies)
+- [ ] **EXP-004**: Spatial Concatenation (Horizontal/Vertical)
+- [ ] **EXP-005**: Pixel-wise operations (Add/Multiply/Subtract)
+- [ ] **EXP-006**: Different ViT variants (vit_small, vit_large, DeiT)
+
+---
+
+## EEG-Only Experiments
+
+### EXP-003: HyperEEG Encoder (Ablation Studies)
+
+#### Overview
+
+| Item | Value |
+|------|-------|
+| **Date** | 2026-01-07 |
+| **Model** | HyperEEG Encoder (Dual-Stream Siamese) |
+| **Task** | 3-class classification (Single/Competition/Cooperation) |
+| **Fusion Strategy** | 4-stage progressive fusion (M1→M2→M3→M4) |
+| **Status** | Completed |
+
+#### Architecture
+
+```
+EEG_A (B, 32, 1024) ──┐
+                      ├── [M1: TemporalBlock] ──► (B, 32, 128) × 2
+EEG_B (B, 32, 1024) ──┘         (Shared)
+                                    │
+                                    ▼
+                         [M2: IntraGraphBlock] ──► (B, 32, 128) × 2
+                                (Shared)          Self-Attention
+                                    │
+                                    ▼
+                        [M3: InterBrainCrossAttn] ──► (B, 32, 128) × 2
+                              Cross-Attention
+                                    │
+                                    ▼
+                         [M4: UncertaintyFusion] ──► (B, 128)
+                           Inverse-Variance Weighted
+                                    │
+                                    ▼
+                              [Classifier] ──► (B, 3)
+```
+
+#### Core Modules
+
+| Module | Component | Function | Ablation Flag |
+|--------|-----------|----------|---------------|
+| **M1** | SincConv1d | Learnable band-pass filtering | `use_sinc` |
+| **M2** | IntraGraphBlock | Intra-brain channel connectivity | `use_graph` |
+| **M3** | InterBrainCrossAttn | Inter-brain cross-attention | `use_cross_attn` |
+| **M4** | UncertaintyFusion | Inverse-variance weighted fusion | `use_uncertainty` |
+
+#### Training Commands
+
+```bash
+# Step 1: Preprocess data (one-time, ~5-10 min)
+python 2_Preprocessing/scripts/preprocess_eeg_windows.py
+
+# Step 2a: Run single experiment
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation full
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation baseline
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation no_sinc
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation no_graph
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation no_cross
+python 4_Experiments/scripts/train_eeg_hypereeg.py --ablation no_uncertainty
+
+# Step 2b: Run all ablation experiments (automated)
+python run_experiments.py
+```
+
+#### Ablation Configurations
+
+| Config | M1 (SincConv) | M2 (Graph) | M3 (CrossAttn) | M4 (Uncertainty) |
+|--------|:-------------:|:----------:|:--------------:|:----------------:|
+| `full` | ✓ | ✓ | ✓ | ✓ |
+| `baseline` | ✗ | ✗ | ✗ | ✗ |
+| `no_sinc` | ✗ | ✓ | ✓ | ✓ |
+| `no_graph` | ✓ | ✗ | ✓ | ✓ |
+| `no_cross` | ✓ | ✓ | ✗ | ✓ |
+| `no_uncertainty` | ✓ | ✓ | ✓ | ✗ |
+
+#### Hyperparameters (Finalized)
+
+**Model Architecture**:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `in_channels` | 32 | EEG channels |
+| `in_timepoints` | 1024 | Timepoints per window |
+| `embed_dim` | 128 | Feature embedding dimension |
+| `num_heads` | 4 | Attention heads |
+| `dropout` | 0.1 | Dropout probability |
+| `sample_rate` | 250 | EEG sampling rate (Hz) |
+| `sinc_kernel_size` | 125 | SincConv kernel size |
+
+**Training**:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `epochs` | 150 | Training epochs |
+| `batch_size` | 256 | Optimized for RTX 4070 12GB |
+| `learning_rate` | 5e-4 | Initial LR |
+| `weight_decay` | 0.01 | L2 regularization |
+| `warmup_epochs` | 10 | Linear warmup epochs |
+| `scheduler` | cosine | Cosine annealing |
+| `fp16` | true | Mixed precision training |
+| `max_grad_norm` | 1.0 | Gradient clipping |
+
+**Data**:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `window_size` | 1024 | Sliding window size |
+| `stride` | 256 | Sliding stride (75% overlap) |
+| `filter_low` | 0.5 | High-pass cutoff (Hz) |
+| `filter_high` | 50.0 | Low-pass cutoff (Hz) |
+| `val_pairs` | [33-40] | Validation Pair IDs |
+
+**Data Augmentation** (Training only):
+
+| Augmentation | Parameters |
+|--------------|------------|
+| Time Masking | `max_length=50, num_masks=2` |
+| Channel Dropout | `prob=0.2` |
+| Gaussian Noise | `std=0.05` |
+
+#### Data Statistics
+
+| Split | Samples | Windows | Single | Competition | Cooperation |
+|-------|---------|---------|--------|-------------|-------------|
+| Train | 3,187 | 28,683 | 14,346 | 7,155 | 7,182 |
+| Val | 1,276 | 11,484 | 5,751 | 2,853 | 2,880 |
+
+#### Model Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total Parameters | ~680K |
+| GPU Memory (FP16, batch=256) | ~4 GB |
+| Training Time (per epoch) | ~1 min |
+
+#### Files
+
+| Type | Path |
+|------|------|
+| Model | `3_Models/backbones/hypereeg.py` |
+| Training Script | `4_Experiments/scripts/train_eeg_hypereeg.py` |
+| Preprocessing | `2_Preprocessing/scripts/preprocess_eeg_windows.py` |
+| Config | `4_Experiments/configs/eeg_hypereeg.yaml` |
+| Checkpoints | `4_Experiments/runs/eeg_hypereeg/{ablation_mode}/` |
+| Preprocessed Data | `1_Data/datasets/EEGseg_preprocessed/` |
+
+#### Wandb Config
+
+| Parameter | Value |
+|-----------|-------|
+| Project | `Multimodal_EEG` |
+| Run Name | `hypereeg_{ablation_mode}_{timestamp}` |
+| Tags | `hypereeg`, `hyperscanning`, `dual-eeg`, `social-interaction` |

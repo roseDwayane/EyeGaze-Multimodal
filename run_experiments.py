@@ -1,114 +1,172 @@
-import os
-import re
+"""
+Run All HyperEEG Ablation Experiments
+
+This script runs all ablation experiments for the HyperEEG Encoder model.
+Each experiment trains the model with a different component configuration.
+
+Ablation Configurations:
+    - full: All components enabled (M1+M2+M3+M4)
+    - baseline: All components disabled
+    - no_sinc: Full model without SincConv (M1)
+    - no_graph: Full model without Graph Attention (M2)
+    - no_cross: Full model without Cross-Attention (M3)
+    - no_uncertainty: Full model without Uncertainty Fusion (M4)
+
+Usage:
+    python run_experiments.py
+    python run_experiments.py --experiments full baseline
+    python run_experiments.py --skip-preprocessing
+"""
+
 import subprocess
 import sys
+import argparse
+from pathlib import Path
+from datetime import datetime
 
-def update_config(config_path, fusion_mode):
-    """
-    Updates the fusion_mode in the specified YAML config file using regex to preserve comments.
-    """
-    with open(config_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+# All ablation experiment configurations
+ABLATION_EXPERIMENTS = [
+    "full",
+    "baseline",
+    "no_sinc",
+    "no_graph",
+    "no_cross",
+    "no_uncertainty",
+]
 
-    # Regex to find fusion_mode: "..." or fusion_mode: '...' or fusion_mode: ...
-    # This pattern assumes fusion_mode is on its own line or at least clearly defined.
-    # Group 1: 'fusion_mode: ' (and whitespace)
-    # Group 2: Opening quote (optional)
-    # Group 3: The value (until closing quote or boundary)
-    # Group 4: Closing quote (optional)
-    pattern = r'(fusion_mode:\s*)(["\']?)([^"\\]+\b)(["\']?)'
-    
-    # Replacement string: Group 1 content + " + new_mode + "
-    # We use r'\g<1>' to refer to group 1 safely.
-    replacement = r'\g<1>"' + fusion_mode + '"'
-    
-    new_content = re.sub(pattern, replacement, content)
+# Project paths
+PROJECT_ROOT = Path(__file__).parent
+TRAIN_SCRIPT = PROJECT_ROOT / "4_Experiments" / "scripts" / "train_eeg_hypereeg.py"
+PREPROCESS_SCRIPT = PROJECT_ROOT / "2_Preprocessing" / "scripts" / "preprocess_eeg_windows.py"
+PREPROCESSED_DIR = PROJECT_ROOT / "1_Data" / "datasets" / "EEGseg_preprocessed"
 
-    with open(config_path, 'w', encoding='utf-8') as f:
-        f.write(new_content)
-    
-    print(f"Updated {config_path} to fusion_mode: \"{fusion_mode}\"")
 
-def run_experiment(script_path, config_path):
-    """
-    Runs the python training script with the given config.
-    """
-    cmd = [sys.executable, script_path, "--config", config_path]
-    print(f"Running command: {' '.join(cmd)}")
-    
-    # running the command and waiting for it to complete
-    result = subprocess.run(cmd)
-    
-    if result.returncode != 0:
-        print(f"Error running experiment: {cmd}")
-        # We might want to stop if one fails, or continue. 
-        # For now, let's raise an error to stop execution so the user notices.
-        raise RuntimeError(f"Experiment failed with return code {result.returncode}")
-    else:
-        print("Experiment finished successfully.\n")
+def run_command(cmd: list, description: str) -> bool:
+    """Run a command and return success status."""
+    print(f"\n{'='*60}")
+    print(f"[RUN] {description}")
+    print(f"[CMD] {' '.join(cmd)}")
+    print(f"{'='*60}\n")
 
-def main():
-    experiments = [
-        {
-            "description": "1. Early Fusion - Concat",
-            "config": "4_Experiments/configs/gaze_earlyfusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_earlyfusion.py",
-            "mode": "concat"
-        },
-        {
-            "description": "2. Late Fusion - Full",
-            "config": "4_Experiments/configs/gaze_latefusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_latefusion.py",
-            "mode": "full"
-        },
-        {
-            "description": "3. Late Fusion - Concat",
-            "config": "4_Experiments/configs/gaze_latefusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_latefusion.py",
-            "mode": "concat"
-        },
-        {
-            "description": "4. Late Fusion - Add",
-            "config": "4_Experiments/configs/gaze_latefusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_latefusion.py",
-            "mode": "add"
-        },
-        {
-            "description": "5. Late Fusion - Subtract",
-            "config": "4_Experiments/configs/gaze_latefusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_latefusion.py",
-            "mode": "subtract"
-        },
-        {
-            "description": "6. Late Fusion - Multiply",
-            "config": "4_Experiments/configs/gaze_latefusion.yaml",
-            "script": "4_Experiments/scripts/train_gaze_latefusion.py",
-            "mode": "multiply"
-        }
+    try:
+        result = subprocess.run(cmd, check=True)
+        print(f"\n[SUCCESS] {description}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"\n[FAILED] {description}")
+        print(f"[ERROR] Exit code: {e.returncode}")
+        return False
+    except KeyboardInterrupt:
+        print(f"\n[INTERRUPTED] {description}")
+        return False
+
+
+def check_preprocessed_data() -> bool:
+    """Check if preprocessed data exists."""
+    train_dir = PREPROCESSED_DIR / "train"
+    val_dir = PREPROCESSED_DIR / "val"
+
+    required_files = [
+        train_dir / "eeg1.npy",
+        train_dir / "eeg2.npy",
+        train_dir / "labels.npy",
+        val_dir / "eeg1.npy",
+        val_dir / "eeg2.npy",
+        val_dir / "labels.npy",
     ]
 
-    print(f"Starting batch of {len(experiments)} experiments...")
+    return all(f.exists() for f in required_files)
+
+
+def run_preprocessing() -> bool:
+    """Run the preprocessing script."""
+    cmd = [sys.executable, str(PREPROCESS_SCRIPT)]
+    return run_command(cmd, "Preprocessing EEG data")
+
+
+def run_experiment(ablation_mode: str) -> bool:
+    """Run a single ablation experiment."""
+    cmd = [
+        sys.executable,
+        str(TRAIN_SCRIPT),
+        "--ablation", ablation_mode
+    ]
+    return run_command(cmd, f"Training HyperEEG ({ablation_mode})")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run HyperEEG ablation experiments")
+    parser.add_argument(
+        "--experiments",
+        nargs="+",
+        choices=ABLATION_EXPERIMENTS,
+        default=ABLATION_EXPERIMENTS,
+        help="Specific experiments to run (default: all)"
+    )
+    parser.add_argument(
+        "--skip-preprocessing",
+        action="store_true",
+        help="Skip preprocessing step (if data already preprocessed)"
+    )
+    args = parser.parse_args()
+
+    print("="*60)
+    print("HyperEEG Ablation Experiments Runner")
+    print("="*60)
+    print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Experiments to run: {args.experiments}")
+    print(f"Total experiments: {len(args.experiments)}")
     print("="*60)
 
-    for i, exp in enumerate(experiments, 1):
-        print(f"[{i}/{len(experiments)}] {exp['description']}")
-        
-        # verify paths exist
-        if not os.path.exists(exp['config']):
-            print(f"Config file not found: {exp['config']}")
-            return
-        if not os.path.exists(exp['script']):
-            print(f"Script file not found: {exp['script']}")
-            return
+    # Step 1: Check/Run preprocessing
+    if not args.skip_preprocessing:
+        if check_preprocessed_data():
+            print("\n[INFO] Preprocessed data found. Skipping preprocessing.")
+        else:
+            print("\n[INFO] Preprocessed data not found. Running preprocessing...")
+            if not run_preprocessing():
+                print("\n[ERROR] Preprocessing failed. Exiting.")
+                sys.exit(1)
+    else:
+        print("\n[INFO] Skipping preprocessing (--skip-preprocessing flag)")
 
-        try:
-            update_config(exp['config'], exp['mode'])
-            run_experiment(exp['script'], exp['config'])
-        except Exception as e:
-            print(f"Failed during experiment {i}: {e}")
-            break
+    # Step 2: Run experiments
+    results = {}
 
-    print("All experiments completed.")
+    for i, ablation_mode in enumerate(args.experiments, 1):
+        print(f"\n{'#'*60}")
+        print(f"# Experiment {i}/{len(args.experiments)}: {ablation_mode}")
+        print(f"{'#'*60}")
+
+        success = run_experiment(ablation_mode)
+        results[ablation_mode] = "SUCCESS" if success else "FAILED"
+
+        if not success:
+            print(f"\n[WARNING] Experiment {ablation_mode} failed. Continuing with next...")
+
+    # Step 3: Summary
+    print("\n" + "="*60)
+    print("EXPERIMENT SUMMARY")
+    print("="*60)
+    print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"\n{'Experiment':<20} {'Status':<10}")
+    print("-"*30)
+
+    success_count = 0
+    for exp, status in results.items():
+        status_icon = "[OK]" if status == "SUCCESS" else "[X]"
+        print(f"{exp:<20} {status_icon} {status}")
+        if status == "SUCCESS":
+            success_count += 1
+
+    print("-"*30)
+    print(f"Total: {success_count}/{len(results)} experiments completed successfully")
+    print("="*60)
+
+    # Exit with error code if any experiment failed
+    if success_count < len(results):
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

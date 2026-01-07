@@ -120,7 +120,7 @@
             }
           }
         ],
-        "currentTab": 2
+        "currentTab": 5
       }
     ],
     "direction": "vertical"
@@ -194,7 +194,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "4_Experiments/experiments_list.md",
                 "collapseAll": true,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -204,7 +204,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for eeg"
+              "title": "Backlinks for experiments_list"
             }
           },
           {
@@ -213,12 +213,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "4_Experiments/experiments_list.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from eeg"
+              "title": "Outgoing links from experiments_list"
             }
           },
           {
@@ -256,13 +256,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "4_Experiments/experiments_list.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of eeg"
+              "title": "Outline of experiments_list"
             }
           }
         ],
@@ -284,8 +284,17 @@
       "bases:Create new base": false
     }
   },
-  "active": "90c0f78abccf2f02",
+  "active": "e66bd72832e7482e",
   "lastOpenFiles": [
+    "run_experiments.py.tmp.24396.1767779759323",
+    "0_Prompts/development/late_fusion_vit.md",
+    "0_Prompts/development/eeg.md",
+    "4_Experiments/experiments_list.md.tmp.24396.1767779719214",
+    "4_Experiments/experiments_list.md",
+    "CLAUDE.md",
+    "nul",
+    "CLAUDE.md.tmp.24396.1767779620705",
+    "0_Prompts/development/early_fusion_vit.md",
     "wandb/run-20260107_161401-cu7i6a3w/files/config.yaml",
     "wandb/run-20260107_161401-cu7i6a3w/files/wandb-summary.json",
     "wandb/run-20260107_161401-cu7i6a3w/files/output.log",
@@ -293,16 +302,8 @@
     "wandb/run-20260107_161401-cu7i6a3w/files/wandb-metadata.json",
     "wandb/run-20260107_161401-cu7i6a3w/run-cu7i6a3w.wandb",
     "wandb/run-20260107_161401-cu7i6a3w/logs/debug-internal.log",
-    "wandb/run-20260107_161401-cu7i6a3w/tmp/code",
-    "wandb/run-20260107_161401-cu7i6a3w/logs/debug.log",
-    "wandb/run-20260107_161401-cu7i6a3w/tmp",
-    "wandb/run-20260107_161401-cu7i6a3w/logs",
-    "0_Prompts/development/late_fusion_vit.md",
-    "CLAUDE.md",
     "3_Models/backbones/PLAN_hypereeg.md",
-    "0_Prompts/development/eeg.md",
     "1_Data/raw/EEG/EEG sample.png",
-    "0_Prompts/development/early_fusion_vit.md",
     "3_Models/design_docs/fig3.EEGArch.png",
     "3_Models/design_docs/Mermaid Chart - Create complex, visual diagrams with text.-2026-01-05-120143.png",
     "0_Prompts/experiments/early_fusion_vit.md",
@@ -313,7 +314,6 @@
     "7_Analysis/figures/early_(subtract)/fig_attention_sample_6.png",
     "7_Analysis/figures/early_(subtract)/fig_attention_sample_3.png",
     "7_Analysis/figures/early_(subtract)/fig_attention_sample_0.png",
-    "4_Experiments/experiments_list.md",
     "7_Analysis/analysis_list.md",
     "7_Analysis/python_scripts/PLAN_analyze_gaze.md",
     "4_Experiments/plan_gaze_earlyfusion.md",

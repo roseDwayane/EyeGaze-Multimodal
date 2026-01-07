@@ -95,15 +95,85 @@ img_b (B, 3, 224, 224) ──┘                         └── CLS_2 (B, 768
 
 **程式碼位置**: `3_Models/backbones/late_fusion_vit.py`
 
-#### 模組 2｜Dual EEG Transformer 跨腦同步建模
+#### 模組 2｜HyperEEG Encoder 跨腦同步建模
 
-基於 Artifact Removal Transformer 架構改良，專為捕捉雙人神經同步特徵設計。
+專為 Hyperscanning EEG 設計的雙流架構，透過四階段漸進式處理捕捉雙人神經同步特徵。
 
-|                         | Dual EEG Transformer                                |
-| ----------------------- | --------------------------------------------------- |
-| Cross-Brain Comm.跨腦通訊機制 | Siamese Encoder + Cross-Brain Attn 雙向資訊流動學習         |
-| IBS Token 腦際同步標記        | PLV + Power Correlation Theta/Alpha/Beta/Gamma 頻帶量化 |
-| Symmetric Fusion 對稱性融合  | f(P1,P2) = f(P2,P1) 排列不變性 + Symmetry Loss           |
+##### 已實作：HyperEEG Encoder
+
+**技術實作**：
+- **框架**: PyTorch
+- **架構**: Dual-Stream Siamese Network (共享權重編碼器)
+- **輸入**: 雙人 EEG 訊號 `(B, 32, 1024)` × 2
+- **輸出**: 分類 logits `(B, 3)`
+
+**四階段架構流程**：
+```
+EEG_A (B, 32, 1024) ──┐
+                      ├── [M1: TemporalBlock] ──► (B, 32, 128) × 2
+EEG_B (B, 32, 1024) ──┘         (Shared)
+                                    │
+                                    ▼
+                         [M2: IntraGraphBlock] ──► (B, 32, 128) × 2
+                                (Shared)          Self-Attention
+                                    │
+                                    ▼
+                        [M3: InterBrainCrossAttn] ──► (B, 32, 128) × 2
+                              Cross-Attention
+                                    │
+                                    ▼
+                         [M4: UncertaintyFusion] ──► (B, 128)
+                           Inverse-Variance Weighted
+                                    │
+                                    ▼
+                              [Classifier] ──► (B, 3)
+```
+
+**四大核心模組**：
+
+| 模組 | 名稱 | 功能 | 技術實現 |
+|------|------|------|----------|
+| **M1** | SincConv1d | 可學習頻帶濾波 | Sinc 函數參數化 Band-pass Filter |
+| **M2** | IntraGraphBlock | 腦內拓撲建模 | Self-Attention (通道間連接學習) |
+| **M3** | InterBrainCrossAttn | 跨腦同步捕捉 | Bidirectional Cross-Attention |
+| **M4** | UncertaintyFusion | 不確定性感知融合 | Inverse-Variance Weighted Fusion |
+
+**M1: SincConv1d - 可學習頻帶濾波**：
+- 基於 SincNet (Ravanelli & Bengio, 2018)
+- 參數化低頻/高頻截止頻率，可學習最佳頻帶
+- 數學公式：`h[n] = 2*f_high*sinc(2πf_high*n) - 2*f_low*sinc(2πf_low*n)`
+
+**M2: IntraGraphBlock - 腦內拓撲**：
+- 將 32 個 EEG 通道視為圖節點
+- Self-Attention 學習功能連接矩陣
+- 注意力權重可解釋為 learned functional connectivity
+
+**M3: InterBrainCrossAttn - 跨腦互動**：
+- 雙向 Cross-Attention：A→B 和 B→A
+- 捕捉雙人間的神經同步模式
+- `Q_A attends to K_B, V_B` (A 從 B 獲取資訊)
+
+**M4: UncertaintyFusion - 不確定性融合**：
+- 估計每個參與者特徵的 mean 和 variance
+- 逆方差加權：`w_A = σ²_B / (σ²_A + σ²_B)`
+- 低不確定性的訊號獲得更高權重
+
+**消融實驗配置**：
+
+| 配置名稱 | M1 | M2 | M3 | M4 | 用途 |
+|----------|:--:|:--:|:--:|:--:|------|
+| `full` | ✓ | ✓ | ✓ | ✓ | 完整模型 |
+| `baseline` | ✗ | ✗ | ✗ | ✗ | 純基線 |
+| `no_sinc` | ✗ | ✓ | ✓ | ✓ | 移除 SincConv |
+| `no_graph` | ✓ | ✗ | ✓ | ✓ | 移除 Graph Attention |
+| `no_cross` | ✓ | ✓ | ✗ | ✓ | 移除 Cross-Attention |
+| `no_uncertainty` | ✓ | ✓ | ✓ | ✗ | 移除 Uncertainty Fusion |
+
+**程式碼位置**: `3_Models/backbones/hypereeg.py`
+
+**訓練腳本**: `4_Experiments/scripts/train_eeg_hypereeg.py`
+
+**配置檔案**: `4_Experiments/configs/eeg_hypereeg.yaml`
 
 #### 模組 3｜Early Fusion — 輸入層融合
 
