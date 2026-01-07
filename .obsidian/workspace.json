@@ -120,7 +120,7 @@
             }
           }
         ],
-        "currentTab": 5
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -194,7 +194,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "4_Experiments/experiments_list.md",
+                "file": "0_Prompts/development/eeg.md",
                 "collapseAll": true,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -204,7 +204,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for experiments_list"
+              "title": "Backlinks for eeg"
             }
           },
           {
@@ -213,12 +213,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "4_Experiments/experiments_list.md",
+                "file": "0_Prompts/development/eeg.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from experiments_list"
+              "title": "Outgoing links from eeg"
             }
           },
           {
@@ -256,13 +256,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "4_Experiments/experiments_list.md",
+                "file": "0_Prompts/development/eeg.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of experiments_list"
+              "title": "Outline of eeg"
             }
           }
         ],
@@ -284,24 +284,24 @@
       "bases:Create new base": false
     }
   },
-  "active": "e66bd72832e7482e",
+  "active": "90c0f78abccf2f02",
   "lastOpenFiles": [
+    "4_Experiments/configs/eeg_hypereeg.yaml.tmp.24396.1767783801045",
+    "2_Preprocessing/scripts/preprocess_eeg_windows.py.tmp.24396.1767783774252",
+    "2_Preprocessing/scripts/preprocess_eeg_windows.py.tmp.24396.1767783714374",
+    "2_Preprocessing/scripts/preprocess_eeg_windows.py.tmp.24396.1767783670942",
+    "2_Preprocessing/scripts/preprocess_eeg_windows.py.tmp.24396.1767783659691",
+    "4_Experiments/experiments_list.md",
     "run_experiments.py.tmp.24396.1767779759323",
     "0_Prompts/development/late_fusion_vit.md",
     "0_Prompts/development/eeg.md",
     "4_Experiments/experiments_list.md.tmp.24396.1767779719214",
-    "4_Experiments/experiments_list.md",
     "CLAUDE.md",
     "nul",
     "CLAUDE.md.tmp.24396.1767779620705",
     "0_Prompts/development/early_fusion_vit.md",
     "wandb/run-20260107_161401-cu7i6a3w/files/config.yaml",
     "wandb/run-20260107_161401-cu7i6a3w/files/wandb-summary.json",
-    "wandb/run-20260107_161401-cu7i6a3w/files/output.log",
-    "wandb/run-20260107_161401-cu7i6a3w/files/requirements.txt",
-    "wandb/run-20260107_161401-cu7i6a3w/files/wandb-metadata.json",
-    "wandb/run-20260107_161401-cu7i6a3w/run-cu7i6a3w.wandb",
-    "wandb/run-20260107_161401-cu7i6a3w/logs/debug-internal.log",
     "3_Models/backbones/PLAN_hypereeg.md",
     "1_Data/raw/EEG/EEG sample.png",
     "3_Models/design_docs/fig3.EEGArch.png",

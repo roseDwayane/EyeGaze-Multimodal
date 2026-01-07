@@ -78,10 +78,20 @@ data:
     1: "Competition"
     2: "Cooperation"
 
-  # Train/Val split - Fixed by Pair
-  split_by: "pair"
+  # =========================================================================
+  # Train/Val Split Configuration
+  # =========================================================================
+  # Split modes:
+  #   - "pair": Split by participant pairs (avoids data leakage, stricter)
+  #   - "stratified": Window-level stratified split by class (faster convergence)
+  split_by: "stratified"
+
+  # For split_by: "stratified"
+  val_ratio: 0.2              # 20% for validation
+  random_seed: 42             # For reproducibility
+
+  # For split_by: "pair" (legacy)
   val_pairs: [33, 34, 35, 36, 37, 38, 39, 40]  # 8 pairs for validation
-  seed: 42
 
 # Training Configuration
 training:

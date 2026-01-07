@@ -5,6 +5,10 @@ This script preprocesses raw EEG CSV files and saves them as optimized .npy file
 for fast training. All preprocessing (bandpass filter, CAR, z-score) is done once
 and windows are pre-computed.
 
+Supports two split modes:
+    - "pair": Split by participant pairs (original method)
+    - "stratified": Window-level stratified split by class (80/20)
+
 Output Structure:
     EEGseg_preprocessed/
     ├── train/
@@ -18,6 +22,7 @@ Output Structure:
 Usage:
     python 2_Preprocessing/scripts/preprocess_eeg_windows.py
     python 2_Preprocessing/scripts/preprocess_eeg_windows.py --config path/to/config.yaml
+    python 2_Preprocessing/scripts/preprocess_eeg_windows.py --split-mode stratified
 """
 
 import sys
@@ -40,6 +45,14 @@ try:
 except ImportError:
     SCIPY_AVAILABLE = False
     print("[Warning] scipy not installed. Bandpass filtering disabled.")
+
+# sklearn for stratified split
+try:
+    from sklearn.model_selection import train_test_split
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    print("[Warning] sklearn not installed. Stratified split requires sklearn.")
 
 # Add project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -391,6 +404,174 @@ def preprocess_dataset(
         print(f"    - {id2label[class_id]}: {count}")
 
 
+def save_split(
+    eeg1_list: List[np.ndarray],
+    eeg2_list: List[np.ndarray],
+    labels_list: List[int],
+    metadata_list: List[Dict],
+    output_dir: Path,
+    split_name: str,
+    label2id: Dict[str, int],
+    config: Dict
+):
+    """Save a data split to disk."""
+    split_dir = output_dir / split_name
+    split_dir.mkdir(parents=True, exist_ok=True)
+
+    # Convert to numpy arrays
+    eeg1_array = np.stack(eeg1_list, axis=0).astype(np.float32)
+    eeg2_array = np.stack(eeg2_list, axis=0).astype(np.float32)
+    labels_array = np.array(labels_list, dtype=np.int64)
+
+    # Save arrays
+    print(f"[Preprocess] Saving {split_name} to {split_dir}...")
+    np.save(split_dir / 'eeg1.npy', eeg1_array)
+    np.save(split_dir / 'eeg2.npy', eeg2_array)
+    np.save(split_dir / 'labels.npy', labels_array)
+
+    # Save metadata
+    id2label = {v: k for k, v in label2id.items()}
+    with open(split_dir / 'metadata.json', 'w', encoding='utf-8') as f:
+        json.dump({
+            'num_windows': len(labels_list),
+            'shape': {
+                'eeg1': list(eeg1_array.shape),
+                'eeg2': list(eeg2_array.shape),
+                'labels': list(labels_array.shape)
+            },
+            'class_distribution': {id2label[k]: int(v) for k, v in
+                pd.Series(labels_list).value_counts().items()},
+            'config': config,
+            'windows': metadata_list[:100]
+        }, f, indent=2, ensure_ascii=False)
+
+    # Print statistics
+    from collections import Counter
+    class_counts = Counter(labels_list)
+    print(f"\n[Preprocess] {split_name} Statistics:")
+    print(f"  - Total windows: {len(labels_list)}")
+    print(f"  - EEG1 shape: {eeg1_array.shape}")
+    print(f"  - EEG2 shape: {eeg2_array.shape}")
+    print(f"  - File sizes:")
+    print(f"    - eeg1.npy: {(split_dir / 'eeg1.npy').stat().st_size / 1e9:.2f} GB")
+    print(f"    - eeg2.npy: {(split_dir / 'eeg2.npy').stat().st_size / 1e9:.2f} GB")
+    print(f"  - Class distribution:")
+    for class_id, count in sorted(class_counts.items()):
+        pct = count / len(labels_list) * 100
+        print(f"    - {id2label[class_id]}: {count} ({pct:.1f}%)")
+
+
+def preprocess_stratified(
+    all_metadata: List[Dict],
+    eeg_base_path: str,
+    output_dir: Path,
+    config: Dict,
+    label2id: Dict[str, int],
+    val_ratio: float = 0.2,
+    random_seed: int = 42,
+    num_workers: int = 4
+):
+    """
+    Preprocess all data and split using stratified sampling.
+
+    Args:
+        all_metadata: All sample metadata
+        eeg_base_path: Path to EEG files
+        output_dir: Output directory
+        config: Preprocessing config
+        label2id: Label to ID mapping
+        val_ratio: Validation set ratio (default: 0.2 = 20%)
+        random_seed: Random seed for reproducibility
+        num_workers: Number of parallel workers
+    """
+    if not SKLEARN_AVAILABLE:
+        raise ImportError("sklearn is required for stratified split. Install with: pip install scikit-learn")
+
+    print(f"\n[Preprocess] Processing ALL samples ({len(all_metadata)}) for stratified split...")
+    print(f"[Preprocess] Val ratio: {val_ratio}, Random seed: {random_seed}")
+
+    # Prepare arguments for parallel processing
+    args_list = [(sample, eeg_base_path, config) for sample in all_metadata]
+
+    # Process all samples
+    all_results = []
+
+    if num_workers > 1:
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(process_single_sample, args): i
+                      for i, args in enumerate(args_list)}
+
+            for future in tqdm(as_completed(futures), total=len(futures),
+                              desc="Processing all samples"):
+                result = future.result()
+                if result is not None:
+                    all_results.append(result)
+    else:
+        for args in tqdm(args_list, desc="Processing all samples"):
+            result = process_single_sample(args)
+            if result is not None:
+                all_results.append(result)
+
+    if len(all_results) == 0:
+        print("[Error] No valid samples found!")
+        return
+
+    print(f"[Preprocess] Processed {len(all_results)} samples successfully")
+
+    # Aggregate all windows
+    print("[Preprocess] Aggregating windows...")
+    all_eeg1 = []
+    all_eeg2 = []
+    all_labels = []
+    all_window_metadata = []
+
+    for result in all_results:
+        for i in range(result['num_windows']):
+            all_eeg1.append(result['eeg1_windows'][i])
+            all_eeg2.append(result['eeg2_windows'][i])
+            all_labels.append(label2id[result['label']])
+            all_window_metadata.append({
+                'pair': result['pair'],
+                'player1': result['player1'],
+                'player2': result['player2'],
+                'window_idx': i,
+                'class': result['label']
+            })
+
+    total_windows = len(all_labels)
+    print(f"[Preprocess] Total windows: {total_windows}")
+
+    # Stratified split
+    print(f"[Preprocess] Performing stratified split ({1-val_ratio:.0%}/{val_ratio:.0%})...")
+
+    indices = list(range(total_windows))
+    train_idx, val_idx = train_test_split(
+        indices,
+        test_size=val_ratio,
+        stratify=all_labels,
+        random_state=random_seed
+    )
+
+    print(f"[Preprocess] Train windows: {len(train_idx)}, Val windows: {len(val_idx)}")
+
+    # Split data
+    train_eeg1 = [all_eeg1[i] for i in train_idx]
+    train_eeg2 = [all_eeg2[i] for i in train_idx]
+    train_labels = [all_labels[i] for i in train_idx]
+    train_metadata = [all_window_metadata[i] for i in train_idx]
+
+    val_eeg1 = [all_eeg1[i] for i in val_idx]
+    val_eeg2 = [all_eeg2[i] for i in val_idx]
+    val_labels = [all_labels[i] for i in val_idx]
+    val_metadata = [all_window_metadata[i] for i in val_idx]
+
+    # Save splits
+    save_split(train_eeg1, train_eeg2, train_labels, train_metadata,
+               output_dir, 'train', label2id, config)
+    save_split(val_eeg1, val_eeg2, val_labels, val_metadata,
+               output_dir, 'val', label2id, config)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Preprocess EEG data for training')
     parser.add_argument('--config', type=str, default='4_Experiments/configs/eeg_hypereeg.yaml',
@@ -399,6 +580,11 @@ def main():
                        help='Output directory')
     parser.add_argument('--workers', type=int, default=8,
                        help='Number of parallel workers')
+    parser.add_argument('--split-mode', type=str, default=None,
+                       choices=['pair', 'stratified'],
+                       help='Split mode: "pair" (by participant pairs) or "stratified" (window-level)')
+    parser.add_argument('--val-ratio', type=float, default=None,
+                       help='Validation ratio for stratified split (default: 0.2)')
     args = parser.parse_args()
 
     # Load config
@@ -421,7 +607,13 @@ def main():
     }
 
     label2id = data_config['label2id']
-    val_pairs = data_config['val_pairs']
+
+    # Determine split mode (CLI arg overrides config)
+    split_mode = args.split_mode or data_config.get('split_by', 'pair')
+    val_ratio = args.val_ratio or data_config.get('val_ratio', 0.2)
+    random_seed = data_config.get('random_seed', 42)
+
+    print(f"[Preprocess] Split mode: {split_mode}")
 
     # Use local path
     eeg_base_path = PROJECT_ROOT / "1_Data" / "datasets" / "EEGseg"
@@ -441,51 +633,77 @@ def main():
 
     print(f"[Preprocess] Total samples: {len(all_metadata)}")
 
-    # Split by pair
-    train_metadata = [m for m in all_metadata if m.get('pair', -1) not in val_pairs]
-    val_metadata = [m for m in all_metadata if m.get('pair', -1) in val_pairs]
-
-    print(f"[Preprocess] Train samples: {len(train_metadata)}")
-    print(f"[Preprocess] Val samples: {len(val_metadata)}")
-    print(f"[Preprocess] Val pairs: {val_pairs}")
-
     # Output directory
     output_dir = PROJECT_ROOT / args.output
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"[Preprocess] Output directory: {output_dir}")
 
-    # Process train split
-    preprocess_dataset(
-        metadata=train_metadata,
-        eeg_base_path=str(eeg_base_path),
-        output_dir=output_dir,
-        config=preprocess_config,
-        label2id=label2id,
-        split_name='train',
-        num_workers=args.workers
-    )
+    # =========================================================================
+    # Split Mode Selection
+    # =========================================================================
+    if split_mode == 'stratified':
+        # Window-level stratified split
+        print("\n" + "=" * 60)
+        print("Mode: STRATIFIED (Window-level split by class)")
+        print("=" * 60)
 
-    # Process val split
-    preprocess_dataset(
-        metadata=val_metadata,
-        eeg_base_path=str(eeg_base_path),
-        output_dir=output_dir,
-        config=preprocess_config,
-        label2id=label2id,
-        split_name='val',
-        num_workers=args.workers
-    )
+        preprocess_stratified(
+            all_metadata=all_metadata,
+            eeg_base_path=str(eeg_base_path),
+            output_dir=output_dir,
+            config=preprocess_config,
+            label2id=label2id,
+            val_ratio=val_ratio,
+            random_seed=random_seed,
+            num_workers=args.workers
+        )
+
+    else:  # split_mode == 'pair'
+        # Original pair-based split
+        print("\n" + "=" * 60)
+        print("Mode: PAIR (Split by participant pairs)")
+        print("=" * 60)
+
+        val_pairs = data_config.get('val_pairs', [33, 34, 35, 36, 37, 38, 39, 40])
+        train_metadata = [m for m in all_metadata if m.get('pair', -1) not in val_pairs]
+        val_metadata = [m for m in all_metadata if m.get('pair', -1) in val_pairs]
+
+        print(f"[Preprocess] Train samples: {len(train_metadata)}")
+        print(f"[Preprocess] Val samples: {len(val_metadata)}")
+        print(f"[Preprocess] Val pairs: {val_pairs}")
+
+        # Process train split
+        preprocess_dataset(
+            metadata=train_metadata,
+            eeg_base_path=str(eeg_base_path),
+            output_dir=output_dir,
+            config=preprocess_config,
+            label2id=label2id,
+            split_name='train',
+            num_workers=args.workers
+        )
+
+        # Process val split
+        preprocess_dataset(
+            metadata=val_metadata,
+            eeg_base_path=str(eeg_base_path),
+            output_dir=output_dir,
+            config=preprocess_config,
+            label2id=label2id,
+            split_name='val',
+            num_workers=args.workers
+        )
 
     print("\n" + "=" * 60)
     print("Preprocessing Complete!")
     print(f"Output saved to: {output_dir}")
+    print(f"Split mode: {split_mode}")
     print("=" * 60)
 
     # Print usage instructions
     print("\nNext steps:")
-    print("1. Update config 'eeg_base_path' to point to preprocessed data")
-    print("2. Set 'use_preprocessed: true' in config")
-    print("3. Run training: python 4_Experiments/scripts/train_eeg_hypereeg.py")
+    print("1. Set 'use_preprocessed: true' in config")
+    print("2. Run training: python 4_Experiments/scripts/train_eeg_hypereeg.py")
 
 
 if __name__ == '__main__':
