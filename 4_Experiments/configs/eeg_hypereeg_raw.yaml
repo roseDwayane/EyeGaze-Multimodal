@@ -1,0 +1,159 @@
+# =============================================================================
+# HyperEEG Encoder - Raw EEG Data (No Preprocessing, No Windowing)
+# =============================================================================
+# This config uses raw EEG data without preprocessing or windowing.
+# Each trial is a complete 13-second segment (32 channels x 3250 timepoints).
+# Split strategy: By participant pairs (no data leakage)
+
+# Model Configuration
+model:
+  name: "HyperEEG_Encoder"
+  num_classes: 3
+
+  # Ablation mode
+  ablation_mode: "full"
+
+  # Architecture parameters
+  in_channels: 32           # Number of EEG channels
+  in_timepoints: 3250       # Full trial: 13s x 250Hz
+  embed_dim: 128            # Feature embedding dimension
+  num_heads: 4              # Attention heads
+  dropout: 0.25              # Dropout rate
+
+  # SincConv parameters (M1)
+  sample_rate: 250          # EEG sampling rate (Hz)
+  sinc_kernel_size: 251     # Sinc filter kernel size
+
+# Data Configuration
+data:
+  # =========================================================================
+  # Raw EEG Data (No Preprocessing, No Windowing)
+  # =========================================================================
+  # Preprocessing script: python 2_Preprocessing/scripts/preprocess_eeg_raw.py
+  use_preprocessed: true
+  preprocessed_dir: "1_Data/datasets/EEGseg_raw"
+  load_to_memory: true
+
+  # Metadata (for reference)
+  metadata_path: "1_Data/metadata/complete_metadata.json"
+  eeg_base_path: "1_Data/datasets/EEGseg"
+
+  # EEG parameters (for reference - data is raw, no preprocessing applied)
+  sampling_rate: 250
+  num_channels: 32
+  timepoints: 3250          # 13 seconds @ 250 Hz
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    Single: 0
+    Competition: 1
+    Cooperation: 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+  # Split Configuration
+  split_by: "pair"
+  val_pairs: [33, 34, 35, 36, 37, 38, 39, 40]
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 64            # Reduced for larger input size (3250 vs 1024)
+
+  # DataLoader
+  num_workers: 0
+  prefetch_factor: 2
+  persistent_workers: false
+
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 5.0e-4
+  weight_decay: 0.01
+
+  # Scheduler
+  scheduler: "cosine"
+  warmup_epochs: 10
+
+  # Class imbalance
+  use_weighted_loss: true
+
+  # Mixed precision
+  fp16: true
+
+  # Gradient clipping
+  max_grad_norm: 1.0
+
+  # Early stopping
+  early_stopping:
+    enabled: false
+    patience: 15
+    min_delta: 0.001
+
+# Checkpoint Configuration
+checkpoint:
+  save_dir: "4_Experiments/runs/eeg_hypereeg_raw"
+  save_every_epochs: 10
+  save_best: true
+  metric_for_best: "val_f1"
+  greater_is_better: true
+
+# Resume Training
+resume:
+  enabled: false
+  checkpoint_path: null
+
+# Data Augmentation
+augmentation:
+  train:
+    time_mask:
+      enabled: true
+      max_mask_length: 500    # Increased for longer sequences
+      num_masks: 3
+
+    channel_dropout:
+      enabled: true
+      dropout_prob: 0.2
+
+    gaussian_noise:
+      enabled: true
+      std: 0.05
+
+    time_shift:
+      enabled: false
+      max_shift: 100
+
+  val:
+    pass: true
+
+# Evaluation
+evaluation:
+  eval_every_epochs: 1
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+
+# Weights & Biases
+wandb:
+  enabled: true
+  project: "Multimodal_EEG"
+  run_name: "hypereeg_raw"
+  tags:
+    - "hypereeg"
+    - "hyperscanning"
+    - "dual-eeg"
+    - "raw-data"
+    - "split-by-pair"
+  notes: "HyperEEG with raw EEG data (no preprocessing, no windowing, split by pair)"
+  log_model: false
+
+# System
+system:
+  seed: 42
+  device: "cuda"
+  deterministic: false
