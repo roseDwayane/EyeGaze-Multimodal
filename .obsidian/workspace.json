@@ -243,17 +243,18 @@
   },
   "active": "f1daaf9925692f3f",
   "lastOpenFiles": [
-    "1_Data/datasets/EEGseg_features/summary.json",
-    "1_Data/datasets/EEGseg_features/Pair-40-Coop-EYE_trial40_playerA_Pair-40-Coop-EYE_trial40_playerB.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-Comp-EYE_trial40_playerA_Pair-40-Comp-EYE_trial40_playerB.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-B-Single-EYE_trial40_player_Pair-40-B-Single-EYE_trial40_observer.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-A-Single-EYE_trial40_player_Pair-40-A-Single-EYE_trial40_observer.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-Coop-EYE_trial39_playerA_Pair-40-Coop-EYE_trial39_playerB.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-Comp-EYE_trial39_playerA_Pair-40-Comp-EYE_trial39_playerB.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-B-Single-EYE_trial39_player_Pair-40-B-Single-EYE_trial39_observer.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-A-Single-EYE_trial39_player_Pair-40-A-Single-EYE_trial39_observer.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-Coop-EYE_trial38_playerA_Pair-40-Coop-EYE_trial38_playerB.npy",
-    "1_Data/datasets/EEGseg_features/Pair-40-Comp-EYE_trial38_playerA_Pair-40-Comp-EYE_trial38_playerB.npy",
+    "wandb/run-20260112_000106-zpwknepw/files/config.yaml",
+    "wandb/run-20260112_000106-zpwknepw/files/wandb-summary.json",
+    "wandb/run-20260112_000106-zpwknepw/files/output.log",
+    "4_Experiments/runs/old_eeg",
+    "wandb/run-20260112_000106-zpwknepw/files/requirements.txt",
+    "wandb/run-20260112_000106-zpwknepw/files/wandb-metadata.json",
+    "wandb/run-20260112_000106-zpwknepw/run-zpwknepw.wandb",
+    "wandb/run-20260112_000106-zpwknepw/logs/debug-internal.log",
+    "wandb/run-20260112_000106-zpwknepw/tmp/code",
+    "wandb/run-20260112_000106-zpwknepw/logs/debug.log",
+    "wandb/run-20260112_000106-zpwknepw/tmp",
+    "plan.md",
     "0_Prompts/experiments/early_fusion_vit.md",
     "0_Prompts/visualization/Gaze.md",
     "0_Prompts/experiments/eeg.md",
@@ -287,7 +288,6 @@
     "8_Manuscript/draf/4_Discussion.md",
     "8_Manuscript/Reference/Reference List.md",
     "8_Manuscript/Gaze.md",
-    "7_Analysis/python_scripts/PLAN_analyze_gaze.md",
-    "4_Experiments/plan_gaze_earlyfusion.md"
+    "7_Analysis/python_scripts/PLAN_analyze_gaze.md"
   ]
 }

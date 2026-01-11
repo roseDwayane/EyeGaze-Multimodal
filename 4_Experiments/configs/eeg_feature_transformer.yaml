@@ -1,0 +1,166 @@
+# =============================================================================
+# Multi-Stream Feature Transformer - Hyperscanning EEG Classification
+# =============================================================================
+# This config uses pre-extracted EEG features (from extract_eeg_features.py)
+# and supports ablation studies via the ablation_mode parameter.
+#
+# Available modes:
+#   - full: All components (Spectral + Intra + Inter + Transformer + Uncertainty)
+#   - baseline: Encoders only with simple concat
+#   - spectral_only, intra_only, inter_only: Single encoder tests
+#   - no_spectral, no_intra, no_inter: Remove single encoder
+#   - no_transformer, no_uncertainty: Component ablation
+#   - intra_inter: Dual-stream (HyperEEG comparison)
+#   - transformer_only_spectral, transformer_only_conn: Partial Transformer
+
+# Model Configuration
+model:
+  name: "MultiStreamFeatureTransformer"
+  num_classes: 3
+
+  # Ablation mode - determines which components are enabled
+  # Options:
+  #   - full: All components enabled
+  #   - baseline: Encoders + simple concat (no transformer, no uncertainty)
+  #   - spectral_only: Only spectral encoder (bands_energy)
+  #   - intra_only: Only intra-brain connectivity encoder
+  #   - inter_only: Only inter-brain connectivity encoder
+  #   - no_spectral: All except spectral encoder
+  #   - no_intra: All except intra-brain encoder
+  #   - no_inter: All except inter-brain encoder
+  #   - no_transformer: Encoders + uncertainty fusion
+  #   - no_uncertainty: Encoders + transformer + avg fusion
+  #   - intra_inter: Intra + Inter encoders only (for HyperEEG comparison)
+  #   - transformer_only_spectral: Transformer on spectral tokens only
+  #   - transformer_only_conn: Transformer on connectivity tokens only
+  ablation_mode: "full"
+
+  # Architecture parameters
+  embed_dim: 64              # Token embedding dimension, 256, 128
+  num_heads: 8                # Transformer attention heads
+  num_layers: 2               # Transformer encoder layers
+  dropout: 0.5                # Dropout rate
+
+  # Input dimensions (from extract_eeg_features.py)
+  num_channels: 32            # EEG channels
+  num_bands: 5                # Frequency bands (delta, theta, alpha, beta, gamma)
+  num_metrics: 7              # Connectivity metrics
+
+# Data Configuration
+data:
+  # Feature data directory (from extract_eeg_features.py)
+  feature_dir: "1_Data/datasets/EEGseg_features"
+  load_to_memory: true        # Load all .npy files into RAM (~8GB)
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    Single: 0
+    Competition: 1
+    Cooperation: 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+  # Train/Val Split Configuration
+  # Split by participant pairs to avoid data leakage
+  val_pairs: [33, 34, 35, 36, 37, 38, 39, 40]  # 8 pairs for validation
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 128             # Smaller batch size (feature files are larger)
+
+  # DataLoader optimization
+  num_workers: 0              # Windows compatibility
+  prefetch_factor: 2
+  persistent_workers: false
+
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 1.0e-4       # Lower LR for Transformer
+  weight_decay: 0.01
+
+  # LR Scheduler with Warmup
+  scheduler: "cosine"
+  warmup_epochs: 10
+
+  # Class imbalance handling
+  use_weighted_loss: true
+
+  # Mixed precision
+  fp16: true
+
+  # Gradient clipping
+  max_grad_norm: 1.0
+
+  # Early stopping
+  early_stopping:
+    enabled: false
+    patience: 15
+    min_delta: 0.001
+
+# Checkpoint Configuration
+checkpoint:
+  save_dir: "4_Experiments/runs/eeg_feature_transformer"
+  save_every_epochs: 10
+  save_best: true
+  metric_for_best: "val_f1"
+  greater_is_better: true
+
+# Resume Training
+resume:
+  enabled: false
+  checkpoint_path: null
+
+# Data Augmentation (Feature-level)
+augmentation:
+  train:
+    # Feature masking (mask random feature values)
+    feature_mask:
+      enabled: true
+      mask_prob: 0.1          # Probability of masking each feature
+
+    # Gaussian noise on features
+    gaussian_noise:
+      enabled: true
+      std: 0.02               # Standard deviation of noise
+
+    # Connectivity dropout (drop random connectivity entries)
+    connectivity_dropout:
+      enabled: false
+      dropout_prob: 0.1
+
+  val:
+    # No augmentation for validation
+    pass: true
+
+# Evaluation
+evaluation:
+  eval_every_epochs: 1
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+
+# Weights & Biases
+wandb:
+  enabled: true
+  project: "Multimodal_EEG"
+  run_name: "feature_transformer"
+  tags:
+    - "feature_transformer"
+    - "hyperscanning"
+    - "pre-extracted"
+    - "social-interaction"
+  notes: "Multi-Stream Feature Transformer using pre-extracted EEG features"
+  log_model: false
+
+# System
+system:
+  seed: 42
+  device: "cuda"
+  deterministic: false

@@ -1,0 +1,100 @@
+# Dual EEG Transformer Configuration
+# Inter-Brain Synchrony Classification: Single / Competition / Cooperation
+
+# Model Configuration
+model:
+  in_channels: 32              # Number of EEG channels (32 for this dataset)
+  num_labels: 3                # Single, Competition, Cooperation
+  d_model: 256                 # Transformer embedding dimension
+  num_layers: 6                # Number of Transformer layers
+  num_heads: 8                 # Number of attention heads
+  d_ff: 1024                   # Feedforward dimension
+  conv_kernel_size: 25         # Temporal conv kernel size
+  conv_stride: 4               # Temporal conv stride (downsampling factor)
+  conv_layers: 2               # Number of temporal conv layers
+
+  # Spectrogram Configuration (NEW)
+  use_spectrogram: true        # Enable Spectrogram tokens (使用 STFT 降低雜訊)
+  spec_n_fft: 128              # STFT FFT window size (~0.5s at 256Hz)
+  spec_hop_length: 64          # STFT hop length (50% overlap)
+  spec_freq_bins: 64           # Number of frequency bins to use (1-45 Hz range)
+
+  # RobustIBSTokenizer Configuration (NEW)
+  use_robust_ibs: true         # ✅ 使用新的 RobustIBSTokenizer (保留完整 connectivity matrices)
+
+# Data Configuration
+data:
+  metadata_path: "1_Data/metadata/complete_metadata.json"
+  eeg_base_path: "1_Data/datasets/EEGseg"  # Local path "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/EEGseg"
+  train_test_split: 0.2        # 20% for test set
+  random_seed: 42
+  max_samples: null             # Limit samples for quick testing (set to null for all)
+
+  # EEG windowing parameters
+  window_size: 1024            # Number of time points per window (4 seconds at 250 Hz)
+  stride: 512                  # Stride for sliding window (2 seconds overlap)
+  sampling_rate: 256           # EEG sampling rate (Hz)
+  filter_low: 1.0              # Low-pass filter frequency (Hz)
+  filter_high: 45.0            # High-pass filter frequency (Hz)
+  enable_preprocessing: false  # Enable EEG preprocessing (CAR, bandpass, z-score normalization)
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    "Single": 0
+    "Competition": 1
+    "Cooperation": 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+# Training Configuration
+training:
+  output_dir: "4_Experiments/runs/old_eeg"
+  num_train_epochs: 50
+  per_device_train_batch_size: 128
+  per_device_eval_batch_size: 128
+
+  # Optimization
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  dropout: 0.1
+
+  # Loss weights
+  use_sym_loss: false                    # Symmetry loss L_sym (關閉)
+  use_ibs_loss: false                    # IBS alignment loss L_ibs (關閉)
+  use_ibs_cls_loss: true                 # ✅ IBS 直接分類 loss (開啟)
+  use_ibs_contrastive: false             # ❌ 暫時關閉（導致 mode collapse）
+
+  lambda_sym: 0.1                        # Weight for symmetry loss
+  lambda_ibs: 0.1                        # Weight for IBS alignment loss
+  lambda_ibs_cls: 1.0                    # ✅ 提高到 1.0（更強的監督）
+  lambda_ibs_contrastive: 0.3            # Weight for IBS contrastive loss
+
+  # Saving
+  save_every_n_epochs: 5       # Save checkpoint every N epochs
+  metric_for_best_model: "f1"
+  greater_is_better: true
+
+  # Logging
+  logging_steps: 10
+  report_to: ["wandb"]         # Use wandb for logging
+
+# System
+system:
+  seed: 42
+  device: "cuda"               # or "cpu"
+  num_workers: 4               # DataLoader workers
+
+# Weights & Biases Configuration
+wandb:
+  project: "Multimodal_EEG"
+  run_name: "old_eeg"
+  tags:
+    - "dual-eeg"
+    - "transformer"
+    - "ibs-token"
+    - "inter-brain-synchrony"
+  notes: "Dual EEG Transformer with IBS token for Single/Competition/Cooperation classification"
+  entity: null                 # Set your wandb username/team here if needed
