@@ -342,3 +342,7 @@ python run_experiments.py
 | Project | `Multimodal_EEG` |
 | Run Name | `hypereeg_{ablation_mode}_{timestamp}` |
 | Tags | `hypereeg`, `hyperscanning`, `dual-eeg`, `social-interaction` |
+
+python 2_Preprocessing/scripts/preprocess_eeg_raw.py
+
+python 4_Experiments/scripts/train_eeg_hypereeg.py --config 4_Experiments/configs/eeg_hypereeg_raw.yaml
