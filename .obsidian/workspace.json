@@ -22,6 +22,20 @@
             }
           },
           {
+            "id": "c3caa029f60119a9",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "0_Prompts/development/EEG_Refactor/總結檔.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "總結檔"
+            }
+          },
+          {
             "id": "1f989d5728456db0",
             "type": "leaf",
             "state": {
@@ -33,20 +47,6 @@
               },
               "icon": "lucide-file",
               "title": "early_fusion_vit"
-            }
-          },
-          {
-            "id": "42141473853c265e",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "3_Models/backbones/PLAN_hypereeg.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "PLAN_hypereeg"
             }
           },
           {
@@ -77,7 +77,8 @@
               "title": "CLAUDE"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -151,7 +152,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "0_Prompts/development/EEG_Refactor/總結檔.md",
                 "collapseAll": true,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -161,7 +162,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for eeg"
+              "title": "Backlinks for 總結檔"
             }
           },
           {
@@ -170,12 +171,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "0_Prompts/development/EEG_Refactor/總結檔.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from eeg"
+              "title": "Outgoing links from 總結檔"
             }
           },
           {
@@ -213,13 +214,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "0_Prompts/development/eeg.md",
+                "file": "0_Prompts/development/EEG_Refactor/總結檔.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of eeg"
+              "title": "Outline of 總結檔"
             }
           }
         ],
@@ -241,24 +242,35 @@
       "bases:Create new base": false
     }
   },
-  "active": "f1daaf9925692f3f",
+  "active": "c3caa029f60119a9",
   "lastOpenFiles": [
-    "wandb/run-20260112_000106-zpwknepw/files/config.yaml",
-    "wandb/run-20260112_000106-zpwknepw/files/wandb-summary.json",
-    "wandb/run-20260112_000106-zpwknepw/files/output.log",
-    "4_Experiments/runs/old_eeg",
-    "wandb/run-20260112_000106-zpwknepw/files/requirements.txt",
-    "wandb/run-20260112_000106-zpwknepw/files/wandb-metadata.json",
-    "wandb/run-20260112_000106-zpwknepw/run-zpwknepw.wandb",
-    "wandb/run-20260112_000106-zpwknepw/logs/debug-internal.log",
-    "wandb/run-20260112_000106-zpwknepw/tmp/code",
-    "wandb/run-20260112_000106-zpwknepw/logs/debug.log",
-    "wandb/run-20260112_000106-zpwknepw/tmp",
+    "0_Prompts/development/EEG_Refactor/feature_transformer/multi_stream_feature_transformer.py",
+    "0_Prompts/development/EEG_Refactor/hyperEEG/hypereeg.py",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/dual_eeg.py",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_refactor.md",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_fix_v2.md",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_fix.md",
+    "0_Prompts/development/EEG_Refactor/hyperEEG/PLAN_hypereeg.md",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/eeg_dual.yaml",
+    "0_Prompts/development/EEG_Refactor/hyperEEG/eeg_hypereeg.yaml",
+    "0_Prompts/development/EEG_Refactor/hyperEEG/eeg_hypereeg_raw.yaml",
+    "0_Prompts/development/EEG_Refactor/feature_transformer/eeg_feature_transformer.yaml",
+    "0_Prompts/development/EEG_Refactor/new_dual_eeg/train_eeg_dual.py",
+    "0_Prompts/development/EEG_Refactor/feature_transformer/train_eeg_feature_transformer.py",
+    "0_Prompts/development/EEG_Refactor/hyperEEG/train_eeg_hypereeg.py",
+    "0_Prompts/development/EEG_Refactor/train_eeg_hypereeg.py",
+    "0_Prompts/development/eeg.md",
+    "0_Prompts/development/EEG_Refactor/總結檔.md",
+    "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_fix_v2.md",
+    "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_fix.md",
+    "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_refactor.md",
+    "3_Models/backbones/PLAN_dual_eeg_fix_v2.md",
+    "3_Models/backbones/PLAN_dual_eeg_fix.md",
+    "3_Models/backbones/PLAN_dual_eeg_refactor.md",
     "plan.md",
     "0_Prompts/experiments/early_fusion_vit.md",
     "0_Prompts/visualization/Gaze.md",
     "0_Prompts/experiments/eeg.md",
-    "0_Prompts/development/eeg.md",
     "7_Analysis/analysis_list.md",
     "4_Experiments/experiments_list.md",
     "3_Models/backbones/PLAN_hypereeg.md",
@@ -277,17 +289,6 @@
     "7_Analysis/figures/entropy_analysis_matlab/fig_roc_late_fusion_(full).png",
     "0_Prompts/development/early_fusion_vit.md",
     "0_Prompts/development/late_fusion_vit.md",
-    "8_Manuscript/draf/2_Methods.md",
-    "8_Manuscript/2_Methods (LaTex).md",
-    "8_Manuscript/3_Results (LaTex).md",
-    "8_Manuscript/1_Introduction (LaTex).md",
-    "8_Manuscript/0_Abstract (LaTex).md",
-    "8_Manuscript/draf/1_Introduction.md",
-    "8_Manuscript/draf/3_Results.md",
-    "8_Manuscript/draf/0_Abstract.md",
-    "8_Manuscript/draf/4_Discussion.md",
-    "8_Manuscript/Reference/Reference List.md",
-    "8_Manuscript/Gaze.md",
-    "7_Analysis/python_scripts/PLAN_analyze_gaze.md"
+    "8_Manuscript/draf/2_Methods.md"
   ]
 }
