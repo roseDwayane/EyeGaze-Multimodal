@@ -73,7 +73,7 @@ training:
   lambda_ibs_contrastive: 0.3            # Weight for IBS contrastive loss
 
   # Saving
-  save_every_n_epochs: 5       # Save checkpoint every N epochs
+  save_every_n_epochs: 10       # Save checkpoint every N epochs
   metric_for_best_model: "f1"
   greater_is_better: true
 
@@ -85,7 +85,7 @@ training:
 system:
   seed: 42
   device: "cuda"               # or "cpu"
-  num_workers: 4               # DataLoader workers
+  num_workers: 0               # DataLoader workers (Set to 0 to avoid Segmentation Faults)
 
 # Weights & Biases Configuration
 wandb:
