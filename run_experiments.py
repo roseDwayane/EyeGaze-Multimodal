@@ -34,7 +34,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 # Project paths
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = PROJECT_ROOT / "4_Experiments" / "configs" / "dual_eeg_transformer.yaml"
 TRAIN_SCRIPT = PROJECT_ROOT / "4_Experiments" / "scripts" / "train_art.py"
 OUTPUT_DIR = PROJECT_ROOT / "4_Experiments" / "runs" / "ablation_studies"
