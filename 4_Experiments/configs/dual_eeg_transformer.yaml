@@ -1,7 +1,40 @@
 # Dual EEG Transformer Configuration
 # Inter-Brain Synchrony Classification: Single / Competition / Cooperation
 
+# ============================================================================
+# Ablation Study Configuration
+# ============================================================================
+ablation:
+  # ===== A. Feature Contribution (輸入特徵的貢獻) =====
+  # Baseline (Temporal Only): use_spectrogram=false, use_ibs=false
+  # + Spectrogram: use_spectrogram=true, use_ibs=false
+  # + IBS (Old/Scalar): use_spectrogram=false, use_ibs=true, ibs_mode="scalar"
+  # + IBS (New/Robust): use_spectrogram=false, use_ibs=true, ibs_mode="robust"
+  # Full Model: use_spectrogram=true, use_ibs=true, ibs_mode="robust"
+  use_spectrogram: true        # Enable Spectrogram tokens
+  use_ibs: true                # Enable IBS tokens (set false for pure temporal baseline)
+  ibs_mode: "robust"           # "robust" (42 tokens) | "scalar" (1 token)
+
+  # ===== B. IBS Tokenizer Design (IBS Tokenizer 的設計驗證) =====
+  # Full (Baseline): ibs_instance_norm=true, ibs_feature_type="all"
+  # No Instance Norm: ibs_instance_norm=false, ibs_feature_type="all"
+  # Phase-only: ibs_instance_norm=true, ibs_feature_type="phase"
+  # Amplitude-only: ibs_instance_norm=true, ibs_feature_type="amplitude"
+  ibs_instance_norm: true      # Enable Instance Normalization in RobustIBSTokenizer
+  ibs_feature_type: "all"      # "all" | "phase" | "amplitude"
+  # phase: PLV, PLI, wPLI, Phase_Diff (4 features per band = 24 tokens)
+  # amplitude: Coherence, Power_Corr, Time_Corr (3 features per band = 18 tokens)
+  # all: All 7 features per band = 42 tokens
+
+  # ===== C. Interaction & Loss (交互機制與 Loss) =====
+  # No Cross-Attention: use_cross_attention=false
+  # No Contrastive Loss: use_ibs_contrastive=false (in training section)
+  # No IBS Cls Head: use_ibs_cls_loss=false (in training section)
+  use_cross_attention: true    # Enable CrossBrainAttention module
+
+# ============================================================================
 # Model Configuration
+# ============================================================================
 model:
   in_channels: 32              # Number of EEG channels (32 for this dataset)
   num_labels: 3                # Single, Competition, Cooperation
@@ -13,14 +46,14 @@ model:
   conv_stride: 4               # Temporal conv stride (downsampling factor)
   conv_layers: 2               # Number of temporal conv layers
 
-  # Spectrogram Configuration (NEW)
-  use_spectrogram: true        # Enable Spectrogram tokens (使用 STFT 降低雜訊)
+  # Spectrogram Configuration
+  # Note: use_spectrogram is now in ablation section
   spec_n_fft: 128              # STFT FFT window size (~0.5s at 256Hz)
   spec_hop_length: 64          # STFT hop length (50% overlap)
   spec_freq_bins: 64           # Number of frequency bins to use (1-45 Hz range)
 
-  # RobustIBSTokenizer Configuration (NEW)
-  use_robust_ibs: true         # ✅ 使用新的 RobustIBSTokenizer (保留完整 connectivity matrices)
+  # IBS Configuration
+  # Note: use_robust_ibs is now controlled by ablation.ibs_mode
 
 # Data Configuration
 data:

@@ -146,12 +146,13 @@ def train_epoch(
     device: torch.device,
     use_sym_loss: bool = False,
     use_ibs_loss: bool = False,
-    use_ibs_cls_loss: bool = True,  # 新增：IBS 直接分類 loss
-    use_ibs_contrastive: bool = True,  # 新增：IBS 對比學習 loss
+    use_ibs_cls_loss: bool = True,
+    use_ibs_contrastive: bool = True,
     lambda_sym: float = 0.1,
     lambda_ibs: float = 0.1,
-    lambda_ibs_cls: float = 0.5,  # 新增
-    lambda_ibs_contrastive: float = 0.3  # 新增
+    lambda_ibs_cls: float = 0.5,
+    lambda_ibs_contrastive: float = 0.3,
+    model_has_ibs: bool = True,  # NEW: Check if model has IBS enabled
 ) -> Dict[str, float]:
     """Train for one epoch"""
     model.train()
@@ -160,8 +161,8 @@ def train_epoch(
     total_loss_ce = 0.0
     total_loss_sym = 0.0
     total_loss_ibs = 0.0
-    total_loss_ibs_cls = 0.0  # 新增
-    total_loss_ibs_contrastive = 0.0  # 新增
+    total_loss_ibs_cls = 0.0
+    total_loss_ibs_contrastive = 0.0
     num_batches = 0
 
     pbar = tqdm(dataloader, desc="Training")
@@ -181,8 +182,8 @@ def train_epoch(
         # Optional losses
         loss_sym = torch.tensor(0.0, device=device)
         loss_ibs = torch.tensor(0.0, device=device)
-        loss_ibs_cls = torch.tensor(0.0, device=device)  # 新增
-        loss_ibs_contrastive = torch.tensor(0.0, device=device)  # 新增
+        loss_ibs_cls = torch.tensor(0.0, device=device)
+        loss_ibs_contrastive = torch.tensor(0.0, device=device)
 
         if use_sym_loss:
             # Symmetry loss: encourages similar CLS representations
@@ -190,28 +191,30 @@ def train_epoch(
             cls2 = outputs['cls2']
             loss_sym = model.module.compute_symmetry_loss(cls1, cls2) if hasattr(model, 'module') else model.compute_symmetry_loss(cls1, cls2)
 
-        if use_ibs_loss:
-            # IBS alignment loss: aligns IBS token with CLS tokens
-            ibs_token = outputs['ibs_token']
-            cls1 = outputs['cls1']
-            cls2 = outputs['cls2']
-            loss_ibs = model.module.compute_ibs_alignment_loss(ibs_token, cls1, cls2) if hasattr(model, 'module') else model.compute_ibs_alignment_loss(ibs_token, cls1, cls2)
+        # IBS-related losses only if model has IBS enabled
+        if model_has_ibs and 'ibs_token' in outputs:
+            if use_ibs_loss:
+                # IBS alignment loss: aligns IBS token with CLS tokens
+                ibs_token = outputs['ibs_token']
+                cls1 = outputs['cls1']
+                cls2 = outputs['cls2']
+                loss_ibs = model.module.compute_ibs_alignment_loss(ibs_token, cls1, cls2) if hasattr(model, 'module') else model.compute_ibs_alignment_loss(ibs_token, cls1, cls2)
 
-        if use_ibs_cls_loss:  # 新增
-            # IBS 直接分類 loss
-            loss_ibs_cls = outputs['loss_ibs_cls']
+            if use_ibs_cls_loss and 'loss_ibs_cls' in outputs:
+                # IBS 直接分類 loss
+                loss_ibs_cls = outputs['loss_ibs_cls']
 
-        if use_ibs_contrastive:  # 新增
-            # IBS 對比學習 loss
-            ibs_token = outputs['ibs_token']
-            loss_ibs_contrastive = model.module.compute_ibs_contrastive_loss(ibs_token, labels) if hasattr(model, 'module') else model.compute_ibs_contrastive_loss(ibs_token, labels)
+            if use_ibs_contrastive:
+                # IBS 對比學習 loss
+                ibs_token = outputs['ibs_token']
+                loss_ibs_contrastive = model.module.compute_ibs_contrastive_loss(ibs_token, labels) if hasattr(model, 'module') else model.compute_ibs_contrastive_loss(ibs_token, labels)
 
         # Total loss
         loss = (loss_ce +
                 lambda_sym * loss_sym +
                 lambda_ibs * loss_ibs +
-                lambda_ibs_cls * loss_ibs_cls +  # 新增
-                lambda_ibs_contrastive * loss_ibs_contrastive)  # 新增
+                lambda_ibs_cls * loss_ibs_cls +
+                lambda_ibs_contrastive * loss_ibs_contrastive)
 
         # Backward pass
         loss.backward()
@@ -222,8 +225,8 @@ def train_epoch(
         total_loss_ce += loss_ce.item()
         total_loss_sym += loss_sym.item()
         total_loss_ibs += loss_ibs.item()
-        total_loss_ibs_cls += loss_ibs_cls.item()  # 新增
-        total_loss_ibs_contrastive += loss_ibs_contrastive.item()  # 新增
+        total_loss_ibs_cls += loss_ibs_cls.item()
+        total_loss_ibs_contrastive += loss_ibs_contrastive.item()
         num_batches += 1
 
         postfix_dict = {
@@ -232,12 +235,13 @@ def train_epoch(
         }
         if use_sym_loss:
             postfix_dict['loss_sym'] = loss_sym.item()
-        if use_ibs_loss:
-            postfix_dict['loss_ibs'] = loss_ibs.item()
-        if use_ibs_cls_loss:  # 新增
-            postfix_dict['loss_ibs_cls'] = loss_ibs_cls.item()
-        if use_ibs_contrastive:  # 新增
-            postfix_dict['loss_ibs_contra'] = loss_ibs_contrastive.item()
+        if model_has_ibs:
+            if use_ibs_loss:
+                postfix_dict['loss_ibs'] = loss_ibs.item()
+            if use_ibs_cls_loss:
+                postfix_dict['loss_ibs_cls'] = loss_ibs_cls.item()
+            if use_ibs_contrastive:
+                postfix_dict['loss_ibs_contra'] = loss_ibs_contrastive.item()
 
         pbar.set_postfix(postfix_dict)
 
@@ -246,8 +250,8 @@ def train_epoch(
         'train/loss_ce': total_loss_ce / num_batches,
         'train/loss_sym': total_loss_sym / num_batches,
         'train/loss_ibs': total_loss_ibs / num_batches,
-        'train/loss_ibs_cls': total_loss_ibs_cls / num_batches,  # 新增
-        'train/loss_ibs_contrastive': total_loss_ibs_contrastive / num_batches  # 新增
+        'train/loss_ibs_cls': total_loss_ibs_cls / num_batches,
+        'train/loss_ibs_contrastive': total_loss_ibs_contrastive / num_batches
     }
 
 
@@ -345,6 +349,13 @@ def main(args):
         pin_memory=True
     )
 
+    # ===== Read ablation config =====
+    ablation_config = config.get('ablation', {})
+
+    # Determine IBS mode from ablation config
+    ibs_mode = ablation_config.get('ibs_mode', 'robust')
+    use_robust_ibs = (ibs_mode == 'robust')
+
     # Create model
     model = DualEEGTransformer(
         in_channels=config['model']['in_channels'],
@@ -358,15 +369,29 @@ def main(args):
         conv_kernel_size=config['model']['conv_kernel_size'],
         conv_stride=config['model']['conv_stride'],
         conv_layers=config['model']['conv_layers'],
-        sampling_rate=config['data']['sampling_rate'],  # 傳入採樣率
-        # Spectrogram parameters (NEW)
-        use_spectrogram=config['model'].get('use_spectrogram', True),
+        sampling_rate=config['data']['sampling_rate'],
+        # Spectrogram parameters
+        use_spectrogram=ablation_config.get('use_spectrogram', True),
         spec_n_fft=config['model'].get('spec_n_fft', 128),
         spec_hop_length=config['model'].get('spec_hop_length', 64),
         spec_freq_bins=config['model'].get('spec_freq_bins', 64),
-        # RobustIBSTokenizer parameter (NEW)
-        use_robust_ibs=config['model'].get('use_robust_ibs', True)  # 預設啟用
+        # IBS tokenization mode
+        use_robust_ibs=use_robust_ibs,
+        # ===== Ablation Study Parameters =====
+        use_ibs=ablation_config.get('use_ibs', True),
+        use_cross_attention=ablation_config.get('use_cross_attention', True),
+        ibs_instance_norm=ablation_config.get('ibs_instance_norm', True),
+        ibs_feature_type=ablation_config.get('ibs_feature_type', 'all'),
     )
+
+    # Log ablation settings
+    logger.info(f"Ablation Settings:")
+    logger.info(f"  - use_spectrogram: {ablation_config.get('use_spectrogram', True)}")
+    logger.info(f"  - use_ibs: {ablation_config.get('use_ibs', True)}")
+    logger.info(f"  - ibs_mode: {ibs_mode}")
+    logger.info(f"  - ibs_instance_norm: {ablation_config.get('ibs_instance_norm', True)}")
+    logger.info(f"  - ibs_feature_type: {ablation_config.get('ibs_feature_type', 'all')}")
+    logger.info(f"  - use_cross_attention: {ablation_config.get('use_cross_attention', True)}")
 
     model = model.to(device)
 
@@ -413,12 +438,13 @@ def main(args):
             device,
             use_sym_loss=config['training'].get('use_sym_loss', False),
             use_ibs_loss=config['training'].get('use_ibs_loss', False),
-            use_ibs_cls_loss=config['training'].get('use_ibs_cls_loss', True),  # 新增
-            use_ibs_contrastive=config['training'].get('use_ibs_contrastive', True),  # 新增
+            use_ibs_cls_loss=config['training'].get('use_ibs_cls_loss', True),
+            use_ibs_contrastive=config['training'].get('use_ibs_contrastive', True),
             lambda_sym=config['training'].get('lambda_sym', 0.1),
             lambda_ibs=config['training'].get('lambda_ibs', 0.1),
-            lambda_ibs_cls=config['training'].get('lambda_ibs_cls', 0.5),  # 新增
-            lambda_ibs_contrastive=config['training'].get('lambda_ibs_contrastive', 0.3)  # 新增
+            lambda_ibs_cls=config['training'].get('lambda_ibs_cls', 0.5),
+            lambda_ibs_contrastive=config['training'].get('lambda_ibs_contrastive', 0.3),
+            model_has_ibs=ablation_config.get('use_ibs', True),  # Pass ablation setting
         )
 
         # Evaluate

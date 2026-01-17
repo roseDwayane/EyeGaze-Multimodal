@@ -478,17 +478,23 @@ class IBSConnectivityMatrixGenerator(nn.Module):
     - 不再全局平均，保留完整的 (C1, C2) 空间结构
     - 支持 6 个频段（包含 broadband 和 delta）
     - 计算 7 种特征的完整 connectivity matrices
+    - 支持消融實驗的特徵選擇 (feature_type)
 
-    输出形状: (B, 6, 7, C, C) 其中 C=in_channels
+    输出形状: (B, 6, num_features, C, C) 其中 C=in_channels
+    - feature_type="all": num_features=7
+    - feature_type="phase": num_features=4 (PLV, PLI, wPLI, Phase_Diff)
+    - feature_type="amplitude": num_features=3 (Coherence, Power_Corr, Time_Corr)
     """
     def __init__(
         self,
         in_channels: int,
         sampling_rate: int = 256,
+        feature_type: str = "all",  # NEW: "all" | "phase" | "amplitude"
     ):
         super().__init__()
         self.in_channels = in_channels
         self.sampling_rate = sampling_rate
+        self.feature_type = feature_type
 
         # 定义 6 个频段范围 (Hz) - 新增 broadband 和 delta
         self.freq_bands = {
@@ -502,6 +508,21 @@ class IBSConnectivityMatrixGenerator(nn.Module):
 
         self.band_names = ['broadband', 'delta', 'theta', 'alpha', 'beta', 'gamma']
         self.feature_names = ['PLV', 'PLI', 'wPLI', 'Coherence', 'Power_Corr', 'Phase_Diff', 'Time_Corr']
+
+        # Feature indices for ablation studies
+        # [PLV, PLI, wPLI, Coherence, Power_Corr, Phase_Diff, Time_Corr]
+        # [  0,   1,    2,         3,          4,          5,         6]
+        if feature_type == "phase":
+            # Phase-based features: PLV, PLI, wPLI, Phase_Diff
+            self.feature_indices = [0, 1, 2, 5]
+            self.num_features = 4
+        elif feature_type == "amplitude":
+            # Amplitude-based features: Coherence, Power_Corr, Time_Corr
+            self.feature_indices = [3, 4, 6]
+            self.num_features = 3
+        else:  # "all"
+            self.feature_indices = list(range(7))
+            self.num_features = 7
 
     def bandpass_filter_fft(
         self,
@@ -743,12 +764,15 @@ class IBSConnectivityMatrixGenerator(nn.Module):
         Args:
             eeg1, eeg2: (B, C, T) - EEG signals
         Returns:
-            connectivity_matrices: (B, 6, 7, C, C) - Full connectivity matrices
+            connectivity_matrices: (B, 6, num_features, C, C) - Filtered connectivity matrices
+            - feature_type="all": (B, 6, 7, C, C)
+            - feature_type="phase": (B, 6, 4, C, C)
+            - feature_type="amplitude": (B, 6, 3, C, C)
         """
         B, C, T = eeg1.shape
 
         # Initialize output tensor: (B, 6 bands, 7 features, C, C)
-        connectivity_matrices = torch.zeros(
+        all_connectivity_matrices = torch.zeros(
             B, len(self.band_names), len(self.feature_names), C, C,
             device=eeg1.device
         )
@@ -779,13 +803,18 @@ class IBSConnectivityMatrixGenerator(nn.Module):
             time_corr_mat = self.compute_time_corr_matrix(eeg1_band, eeg2_band)
 
             # 5. Store in output tensor
-            connectivity_matrices[:, band_idx, 0, :, :] = plv_mat
-            connectivity_matrices[:, band_idx, 1, :, :] = pli_mat
-            connectivity_matrices[:, band_idx, 2, :, :] = wpli_mat
-            connectivity_matrices[:, band_idx, 3, :, :] = coh_mat
-            connectivity_matrices[:, band_idx, 4, :, :] = power_corr_mat
-            connectivity_matrices[:, band_idx, 5, :, :] = phase_diff_mat
-            connectivity_matrices[:, band_idx, 6, :, :] = time_corr_mat
+            all_connectivity_matrices[:, band_idx, 0, :, :] = plv_mat
+            all_connectivity_matrices[:, band_idx, 1, :, :] = pli_mat
+            all_connectivity_matrices[:, band_idx, 2, :, :] = wpli_mat
+            all_connectivity_matrices[:, band_idx, 3, :, :] = coh_mat
+            all_connectivity_matrices[:, band_idx, 4, :, :] = power_corr_mat
+            all_connectivity_matrices[:, band_idx, 5, :, :] = phase_diff_mat
+            all_connectivity_matrices[:, band_idx, 6, :, :] = time_corr_mat
+
+        # 6. Filter features based on feature_type (for ablation studies)
+        # self.feature_indices is set in __init__ based on feature_type
+        connectivity_matrices = all_connectivity_matrices[:, :, self.feature_indices, :, :]
+        # Output shape: (B, 6, num_features, C, C)
 
         return connectivity_matrices
 
@@ -795,27 +824,39 @@ class RobustIBSTokenizer(nn.Module):
     将 IBS Connectivity Matrices 转换为序列化的 Token Embeddings
 
     架构：
-    1. Flatten & Reshape: (B, 6, 7, C, C) -> (B, 42, C*C)
-    2. Instance Normalization: 放大微弱信号
+    1. Flatten & Reshape: (B, 6, num_features, C, C) -> (B, num_tokens, C*C)
+    2. Instance Normalization: 放大微弱信号 (可選，用於消融實驗)
     3. Bottleneck MLP: C*C -> 64 -> d_model (去噪)
     4. Type Embedding: 标识不同的频段和特征
 
-    输出: (B, 42, d_model) 可以直接输入 Transformer
+    输出: (B, num_tokens, d_model) 可以直接输入 Transformer
+    - feature_type="all": num_tokens = 6 bands × 7 features = 42
+    - feature_type="phase": num_tokens = 6 bands × 4 features = 24
+    - feature_type="amplitude": num_tokens = 6 bands × 3 features = 18
     """
     def __init__(
         self,
         in_channels: int,
         d_model: int,
+        use_instance_norm: bool = True,  # NEW: Ablation - disable instance norm
+        num_features: int = 7,            # NEW: Dynamic feature count (7, 4, or 3)
+        num_bands: int = 6,               # Fixed: 6 frequency bands
     ):
         super().__init__()
         self.in_channels = in_channels
         self.d_model = d_model
+        self.use_instance_norm = use_instance_norm
+        self.num_features = num_features
+        self.num_bands = num_bands
+        self.num_tokens = num_bands * num_features  # Dynamic: 42, 24, or 18
 
         matrix_dim = in_channels * in_channels  # C * C = 1024 for C=32
 
         # Step 2: Instance Normalization (对每个 connectivity matrix 独立归一化)
         # 关键：强制将数值分布拉开，解决数值过小问题
-        self.instance_norm = nn.InstanceNorm1d(matrix_dim, affine=True)
+        # NEW: 可通過 use_instance_norm=False 關閉（消融實驗）
+        if use_instance_norm:
+            self.instance_norm = nn.InstanceNorm1d(matrix_dim, affine=True)
 
         # Step 3: Bottleneck MLP (去噪 + 降维)
         # 通过 64 维瓶颈层过滤 Grid Pattern 伪影
@@ -828,8 +869,9 @@ class RobustIBSTokenizer(nn.Module):
 
         # Step 4: Type Embedding (可学习的位置/类型编码)
         # 让 Transformer 知道每个 token 代表哪个频段和特征
-        # Shape: (1, 42, d_model) where 42 = 6 bands * 7 features
-        self.type_embedding = nn.Parameter(torch.randn(1, 42, d_model))
+        # NEW: 動態大小，根據 feature_type 調整
+        # Shape: (1, num_tokens, d_model) where num_tokens = num_bands * num_features
+        self.type_embedding = nn.Parameter(torch.randn(1, self.num_tokens, d_model))
 
         # 初始化
         nn.init.normal_(self.type_embedding, std=0.02)
@@ -837,31 +879,34 @@ class RobustIBSTokenizer(nn.Module):
     def forward(self, connectivity_matrices: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            connectivity_matrices: (B, 6, 7, C, C) - Full IBS connectivity matrices
+            connectivity_matrices: (B, num_bands, num_features, C, C) - IBS connectivity matrices
         Returns:
-            ibs_tokens: (B, 42, d_model) - Tokenized IBS features
+            ibs_tokens: (B, num_tokens, d_model) - Tokenized IBS features
         """
         B, num_bands, num_features, C1, C2 = connectivity_matrices.shape
         assert C1 == C2 == self.in_channels, "Channel dimension mismatch"
+        assert num_bands == self.num_bands, f"Expected {self.num_bands} bands, got {num_bands}"
+        assert num_features == self.num_features, f"Expected {self.num_features} features, got {num_features}"
 
         # Step 1: Flatten & Reshape
-        # (B, 6, 7, C, C) -> (B, 42, C*C)
+        # (B, num_bands, num_features, C, C) -> (B, num_tokens, C*C)
         x = connectivity_matrices.reshape(B, num_bands * num_features, C1 * C2)
 
-        # Step 2: Instance Normalization
+        # Step 2: Instance Normalization (conditional for ablation)
         # 对每个样本的每个 matrix (C*C 维) 独立归一化
-        # Input: (B, 42, 1024) -> permute to (B, 1024, 42) for InstanceNorm1d
-        x = x.permute(0, 2, 1)  # (B, 1024, 42)
-        x = self.instance_norm(x)  # (B, 1024, 42)
-        x = x.permute(0, 2, 1)  # (B, 42, 1024)
+        if self.use_instance_norm:
+            # Input: (B, num_tokens, 1024) -> permute to (B, 1024, num_tokens) for InstanceNorm1d
+            x = x.permute(0, 2, 1)  # (B, 1024, num_tokens)
+            x = self.instance_norm(x)  # (B, 1024, num_tokens)
+            x = x.permute(0, 2, 1)  # (B, num_tokens, 1024)
 
         # Step 3: Bottleneck Projection
-        # (B, 42, 1024) -> (B, 42, 64) -> (B, 42, d_model)
-        x = self.bottleneck(x)  # (B, 42, d_model)
+        # (B, num_tokens, 1024) -> (B, num_tokens, 64) -> (B, num_tokens, d_model)
+        x = self.bottleneck(x)  # (B, num_tokens, d_model)
 
         # Step 4: Add Type Embedding
         # 将频段和特征的身份信息加入
-        x = x + self.type_embedding  # (B, 42, d_model)
+        x = x + self.type_embedding  # (B, num_tokens, d_model)
 
         return x
 
@@ -935,11 +980,17 @@ class DualEEGTransformer(nn.Module):
 
     Architecture:
     1. Temporal convolution frontend for each player
-    2. IBS token generation from cross-brain features
-    3. Token sequence: [CLS, IBS, H1(1), ..., H1(T̃)]
+    2. IBS token generation from cross-brain features (optional)
+    3. Token sequence: [CLS, IBS, H1(1), ..., H1(T̃)] or [CLS, H1(1), ..., H1(T̃)]
     4. Shared Transformer Encoder (Siamese)
-    5. Cross-brain attention
+    5. Cross-brain attention (optional)
     6. Symmetric fusion and classification
+
+    Ablation Study Parameters:
+    - use_ibs: Enable/disable IBS tokens
+    - use_cross_attention: Enable/disable CrossBrainAttention
+    - ibs_instance_norm: Enable/disable instance norm in RobustIBSTokenizer
+    - ibs_feature_type: "all" | "phase" | "amplitude"
     """
     def __init__(
         self,
@@ -960,8 +1011,13 @@ class DualEEGTransformer(nn.Module):
         spec_n_fft: int = 128,
         spec_hop_length: int = 64,
         spec_freq_bins: int = 64,
-        # NEW: IBS tokenization mode
+        # IBS tokenization mode
         use_robust_ibs: bool = True,  # Use new RobustIBSTokenizer (recommended)
+        # ===== Ablation Study Parameters (NEW) =====
+        use_ibs: bool = True,               # A: Enable/disable IBS tokens completely
+        use_cross_attention: bool = True,   # C: Enable/disable CrossBrainAttention
+        ibs_instance_norm: bool = True,     # B: Instance norm in RobustIBSTokenizer
+        ibs_feature_type: str = "all",      # B: Feature type: "all" | "phase" | "amplitude"
     ):
         super().__init__()
 
@@ -970,28 +1026,57 @@ class DualEEGTransformer(nn.Module):
         self.use_spectrogram = use_spectrogram
         self.use_robust_ibs = use_robust_ibs
 
+        # ===== Ablation flags =====
+        self.use_ibs = use_ibs
+        self.use_cross_attention = use_cross_attention
+        self.ibs_feature_type = ibs_feature_type
+
+        # Calculate dynamic IBS token count based on feature_type
+        feature_counts = {"all": 7, "phase": 4, "amplitude": 3}
+        self.num_ibs_features = feature_counts.get(ibs_feature_type, 7)
+        if use_ibs:
+            if use_robust_ibs:
+                self.num_ibs_tokens = 6 * self.num_ibs_features  # 42, 24, or 18
+            else:
+                self.num_ibs_tokens = 1  # Scalar IBS
+        else:
+            self.num_ibs_tokens = 0  # No IBS tokens
+
         # Temporal convolution frontend
         self.temporal_conv = TemporalConvFrontend(
             in_channels, d_model, conv_kernel_size, conv_stride, conv_layers
         )
 
-        # Spectrogram token generator (NEW)
+        # Spectrogram token generator
         if use_spectrogram:
             self.spectrogram_generator = SpectrogramTokenGenerator(
                 in_channels, d_model, spec_n_fft, spec_hop_length,
                 sampling_rate, spec_freq_bins
             )
 
-        # IBS token generation: choose between old and new methods
-        if use_robust_ibs:
-            # NEW: Generate full connectivity matrices + robust tokenization
-            self.ibs_matrix_generator = IBSConnectivityMatrixGenerator(
-                in_channels, sampling_rate
+        # IBS token generation (conditional for ablation)
+        if use_ibs:
+            if use_robust_ibs:
+                # NEW: Generate full connectivity matrices + robust tokenization
+                self.ibs_matrix_generator = IBSConnectivityMatrixGenerator(
+                    in_channels, sampling_rate, feature_type=ibs_feature_type
+                )
+                self.ibs_tokenizer = RobustIBSTokenizer(
+                    in_channels, d_model,
+                    use_instance_norm=ibs_instance_norm,
+                    num_features=self.num_ibs_features
+                )
+            else:
+                # OLD: Original IBS token generator (scalar features, global average)
+                self.ibs_generator = IBSTokenGenerator(in_channels, d_model, sampling_rate, use_layernorm=False)
+
+            # IBS token 專用分類頭（直接監督）- only when IBS is enabled
+            self.ibs_classifier = nn.Sequential(
+                nn.Linear(d_model, d_model // 2),
+                nn.ReLU(),
+                nn.Dropout(0.3),
+                nn.Linear(d_model // 2, num_classes)
             )
-            self.ibs_tokenizer = RobustIBSTokenizer(in_channels, d_model)
-        else:
-            # OLD: Original IBS token generator (scalar features, global average)
-            self.ibs_generator = IBSTokenGenerator(in_channels, d_model, sampling_rate, use_layernorm=False)
 
         # CLS tokens (learnable)
         self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
@@ -1004,8 +1089,9 @@ class DualEEGTransformer(nn.Module):
             d_model, num_layers, num_heads, d_ff, dropout, dropout
         )
 
-        # Cross-brain attention
-        self.cross_attn = CrossBrainAttention(d_model, num_heads, dropout)
+        # Cross-brain attention (conditional for ablation)
+        if use_cross_attention:
+            self.cross_attn = CrossBrainAttention(d_model, num_heads, dropout)
 
         # Symmetric fusion
         self.symmetric_fusion = SymmetricFusion(d_model)
@@ -1016,14 +1102,6 @@ class DualEEGTransformer(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(d_model, num_classes)
-        )
-
-        # IBS token 專用分類頭（直接監督）
-        self.ibs_classifier = nn.Sequential(
-            nn.Linear(d_model, d_model // 2),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(d_model // 2, num_classes)
         )
 
         self.dropout = nn.Dropout(dropout)
@@ -1049,110 +1127,128 @@ class DualEEGTransformer(nn.Module):
         h1 = self.temporal_conv(eeg1)  # (B, T̃, d)
         h2 = self.temporal_conv(eeg2)  # (B, T̃, d)
 
-        # 2. Generate IBS tokens
-        if self.use_robust_ibs:
-            # NEW: Full connectivity matrices + robust tokenization
-            # Step 1: Generate connectivity matrices (B, 6, 7, C, C)
-            connectivity_matrices = self.ibs_matrix_generator(eeg1, eeg2)
-            # Step 2: Tokenize into sequence (B, 42, d_model)
-            ibs_tokens = self.ibs_tokenizer(connectivity_matrices)  # (B, 42, d)
-        else:
-            # OLD: Scalar IBS features
-            ibs_token_single = self.ibs_generator(eeg1, eeg2)  # (B, d)
-            ibs_tokens = ibs_token_single.unsqueeze(1)  # (B, 1, d)
+        # 2. Generate IBS tokens (conditional for ablation)
+        ibs_tokens = None
+        if self.use_ibs:
+            if self.use_robust_ibs:
+                # NEW: Full connectivity matrices + robust tokenization
+                # Step 1: Generate connectivity matrices (B, 6, num_features, C, C)
+                connectivity_matrices = self.ibs_matrix_generator(eeg1, eeg2)
+                # Step 2: Tokenize into sequence (B, num_ibs_tokens, d_model)
+                ibs_tokens = self.ibs_tokenizer(connectivity_matrices)
+            else:
+                # OLD: Scalar IBS features
+                ibs_token_single = self.ibs_generator(eeg1, eeg2)  # (B, d)
+                ibs_tokens = ibs_token_single.unsqueeze(1)  # (B, 1, d)
 
-        # 2.5 Generate Spectrogram tokens (NEW)
+        # 2.5 Generate Spectrogram tokens
+        spec1 = None
+        spec2 = None
         if self.use_spectrogram:
             spec1 = self.spectrogram_generator(eeg1)  # (B, C, d)
             spec2 = self.spectrogram_generator(eeg2)  # (B, C, d)
 
-        # 3. Build sequences: [CLS, IBS(1), ..., IBS(42), Spec(1), ..., Spec(C), H(1), ..., H(T̃)]
+        # 3. Build sequences dynamically based on ablation settings
+        # Possible formats:
+        # - Full: [CLS, IBS(1..N), Spec(1..C), H(1..T̃)]
+        # - No IBS: [CLS, Spec(1..C), H(1..T̃)]
+        # - No Spec: [CLS, IBS(1..N), H(1..T̃)]
+        # - Baseline: [CLS, H(1..T̃)]
         cls = self.cls_token.expand(B, -1, -1)  # (B, 1, d)
 
-        if self.use_spectrogram:
-            # New sequence with Spectrogram tokens
-            # Note: ibs_tokens can be (B, 1, d) or (B, 42, d) depending on use_robust_ibs
-            seq1 = torch.cat([cls, ibs_tokens, spec1, h1], dim=1)  # (B, 1+N_ibs+C+T̃, d)
-            seq2 = torch.cat([cls, ibs_tokens, spec2, h2], dim=1)  # (B, 1+N_ibs+C+T̃, d)
-        else:
-            # Original sequence without Spectrogram tokens
-            seq1 = torch.cat([cls, ibs_tokens, h1], dim=1)  # (B, 1+N_ibs+T̃, d)
-            seq2 = torch.cat([cls, ibs_tokens, h2], dim=1)  # (B, 1+N_ibs+T̃, d)
+        # Build sequence by concatenating available components
+        seq1_components = [cls]
+        seq2_components = [cls]
+
+        if ibs_tokens is not None:
+            seq1_components.append(ibs_tokens)
+            seq2_components.append(ibs_tokens)
+
+        if self.use_spectrogram and spec1 is not None:
+            seq1_components.append(spec1)
+            seq2_components.append(spec2)
+
+        seq1_components.append(h1)
+        seq2_components.append(h2)
+
+        seq1 = torch.cat(seq1_components, dim=1)
+        seq2 = torch.cat(seq2_components, dim=1)
 
         # Add positional embedding
         seq1 = self.pos_embed(seq1)
         seq2 = self.pos_embed(seq2)
 
         # 4. Shared Transformer Encoder (Siamese)
-        z1 = self.encoder(seq1)  # (B, T̃+2, d)
-        z2 = self.encoder(seq2)  # (B, T̃+2, d)
+        z1 = self.encoder(seq1)
+        z2 = self.encoder(seq2)
 
-        # 5. Cross-brain attention (包含所有 tokens，讓 CLS 也能交互)
-        z1_cross, z2_cross = self.cross_attn(z1, z2)
-
-        # 6. Extract CLS tokens AFTER cross-attention (獲得跨 player 交互的 CLS)
-        cls1 = z1_cross[:, 0, :]  # (B, d) - 有跨 player 交互
-        cls2 = z2_cross[:, 0, :]  # (B, d) - 有跨 player 交互
-
-        # Determine number of IBS tokens
-        num_ibs_tokens = 42 if self.use_robust_ibs else 1
-
-        # Mean pooling (excluding CLS, IBS, and Spectrogram tokens - only use temporal conv tokens)
-        if self.use_spectrogram:
-            # Skip: CLS(1) + IBS(num_ibs_tokens) + Spec(C) tokens
-            offset = 1 + num_ibs_tokens + self.in_channels
-            mp1 = z1_cross[:, offset:, :].mean(dim=1)  # (B, d)
-            mp2 = z2_cross[:, offset:, :].mean(dim=1)  # (B, d)
+        # 5. Cross-brain attention (conditional for ablation)
+        if self.use_cross_attention:
+            z1_cross, z2_cross = self.cross_attn(z1, z2)
         else:
-            # Skip: CLS(1) + IBS(num_ibs_tokens) tokens
-            offset = 1 + num_ibs_tokens
-            mp1 = z1_cross[:, offset:, :].mean(dim=1)  # (B, d)
-            mp2 = z2_cross[:, offset:, :].mean(dim=1)  # (B, d)
+            # Skip cross-brain attention (ablation: No Cross-Attention)
+            z1_cross, z2_cross = z1, z2
 
-        # 7. Symmetric fusion (使用有交互的 CLS tokens)
+        # 6. Extract CLS tokens AFTER cross-attention
+        cls1 = z1_cross[:, 0, :]  # (B, d)
+        cls2 = z2_cross[:, 0, :]  # (B, d)
+
+        # Calculate dynamic offset for mean pooling based on ablation settings
+        # offset = CLS(1) + IBS(num_ibs_tokens) + Spec(in_channels)
+        offset = 1  # CLS token
+        if self.use_ibs:
+            offset += self.num_ibs_tokens
+        if self.use_spectrogram:
+            offset += self.in_channels
+
+        # Mean pooling (only use temporal conv tokens)
+        mp1 = z1_cross[:, offset:, :].mean(dim=1)  # (B, d)
+        mp2 = z2_cross[:, offset:, :].mean(dim=1)  # (B, d)
+
+        # 7. Symmetric fusion
         f_pair = self.symmetric_fusion(cls1, cls2)  # (B, d)
 
         # 8. Concatenate and classify
         z_fuse = torch.cat([f_pair, mp1, mp2], dim=-1)  # (B, 3*d)
         logits = self.classifier(z_fuse)  # (B, num_classes)
 
-        # 9. IBS token 直接分類
-        if self.use_robust_ibs:
-            # NEW: Pool all 42 IBS tokens for classification
-            # Extract IBS tokens from sequence: indices [1:43] (after CLS)
-            ibs_tokens_from_seq = z1_cross[:, 1:1+num_ibs_tokens, :]  # (B, 42, d)
-            ibs_pooled = ibs_tokens_from_seq.mean(dim=1)  # (B, d) - mean pool over 42 tokens
-            ibs_logits = self.ibs_classifier(ibs_pooled)  # (B, num_classes)
-        else:
-            # OLD: Single IBS token
-            ibs_token_from_seq = z1_cross[:, 1, :]  # (B, d) - 2nd token is IBS
-            ibs_logits = self.ibs_classifier(ibs_token_from_seq)  # (B, num_classes)
-
-        # Compute loss if labels provided
-        if self.use_robust_ibs:
-            ibs_token_output = ibs_pooled  # (B, d) - pooled from 42 tokens
-        else:
-            ibs_token_output = ibs_token_from_seq  # (B, d) - single token
+        # 9. IBS token classification (only if IBS is enabled)
+        ibs_logits = None
+        ibs_token_output = None
+        if self.use_ibs:
+            if self.use_robust_ibs:
+                # Pool all IBS tokens for classification
+                # Extract IBS tokens from sequence: indices [1:1+num_ibs_tokens] (after CLS)
+                ibs_tokens_from_seq = z1_cross[:, 1:1+self.num_ibs_tokens, :]
+                ibs_pooled = ibs_tokens_from_seq.mean(dim=1)  # (B, d)
+                ibs_logits = self.ibs_classifier(ibs_pooled)
+                ibs_token_output = ibs_pooled
+            else:
+                # Single IBS token
+                ibs_token_from_seq = z1_cross[:, 1, :]  # (B, d)
+                ibs_logits = self.ibs_classifier(ibs_token_from_seq)
+                ibs_token_output = ibs_token_from_seq
 
         output = {
             'logits': logits,
-            'ibs_logits': ibs_logits,  # 新增
             'cls1': cls1,
             'cls2': cls2,
-            'ibs_token': ibs_token_output
         }
+
+        # Only include IBS-related outputs if IBS is enabled
+        if self.use_ibs:
+            output['ibs_logits'] = ibs_logits
+            output['ibs_token'] = ibs_token_output
 
         if labels is not None:
             loss_ce = F.cross_entropy(logits, labels)
-            loss_ibs_cls = F.cross_entropy(ibs_logits, labels)  # 新增 IBS 分類 loss
-
-            # Optional: Symmetry loss L_sym = ||cls1 - cls2||^2
-            # Encourages similar representations when appropriate
-            # Can be weighted and disabled initially
-
             output['loss'] = loss_ce
             output['loss_ce'] = loss_ce
-            output['loss_ibs_cls'] = loss_ibs_cls  # 新增
+
+            # IBS classification loss (only if IBS is enabled)
+            if self.use_ibs and ibs_logits is not None:
+                loss_ibs_cls = F.cross_entropy(ibs_logits, labels)
+                output['loss_ibs_cls'] = loss_ibs_cls
 
         return output
 
