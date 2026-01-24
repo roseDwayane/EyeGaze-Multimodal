@@ -466,12 +466,10 @@ def compute_batch_spectral_entropy(
 
 # Standard 32-channel 10-20 system electrode names and positions
 STANDARD_32_CHANNELS = [
-    'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8',
-    'FT9', 'FC5', 'FC1', 'FC2', 'FC6', 'FT10',
-    'T7', 'C3', 'Cz', 'C4', 'T8',
-    'TP9', 'CP5', 'CP1', 'CP2', 'CP6', 'TP10',
-    'P7', 'P3', 'Pz', 'P4', 'P8',
-    'O1', 'Oz', 'O2'
+    'Fp1', 'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3',
+    'T7', 'TP9', 'CP5', 'CP1', 'Pz', 'P3', 'P7', 'O1',
+    'Oz', 'O2', 'P4', 'P8', 'TP10', 'CP6', 'CP2', 'Cz',
+    'C4', 'T8', 'FT10', 'FC6', 'FC2', 'F4', 'F8', 'Fp2'
 ]
 
 # 2D positions for topomap visualization (normalized coordinates)

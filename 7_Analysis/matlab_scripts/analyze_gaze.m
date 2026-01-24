@@ -6,7 +6,7 @@
 %   Run this script in MATLAB. Ensure the CSV files exist in:
 %   7_Analysis/raw_result/entropy_analysis/
 % 
-% Author: CNElab (Converted from Python)
+% Author: KungYi Chang (Converted from Python)
 % Date: 2026
 
 % =========================================================================

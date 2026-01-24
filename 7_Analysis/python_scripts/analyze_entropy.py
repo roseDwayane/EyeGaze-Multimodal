@@ -648,7 +648,7 @@ def run_analysis(
         print(f"  Saved: {gaze_summary_path}")
 
     if eeg_df is not None and len(eeg_df) > 0:
-        eeg_raw_path = Path(config.output_dir) / "eeg_entropy_raw.csv"
+        eeg_raw_path = Path(config.output_dir) / "eeg_entropy_raw_corrected.csv"
         eeg_df.to_csv(eeg_raw_path, index=False)
         print(f"  Saved: {eeg_raw_path}")
 

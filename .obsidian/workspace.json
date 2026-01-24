@@ -8,20 +8,6 @@
         "type": "tabs",
         "children": [
           {
-            "id": "f1daaf9925692f3f",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "0_Prompts/development/eeg.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "eeg"
-            }
-          },
-          {
             "id": "c3caa029f60119a9",
             "type": "leaf",
             "state": {
@@ -36,21 +22,35 @@
             }
           },
           {
-            "id": "21f097e46dbda48b",
+            "id": "ed22bdf30a37525d",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "0_Prompts/visualization/Gaze.md",
+                "file": "0_Prompts/experiments/eeg.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Gaze"
+              "title": "eeg"
             }
           },
           {
-            "id": "1f989d5728456db0",
+            "id": "e0192b0cb67fff6d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "0_Prompts/visualization/eeg.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "eeg"
+            }
+          },
+          {
+            "id": "21f097e46dbda48b",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -61,6 +61,20 @@
               },
               "icon": "lucide-file",
               "title": "early_fusion_vit"
+            }
+          },
+          {
+            "id": "1f989d5728456db0",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "0_Prompts/visualization/Gaze.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Gaze"
             }
           },
           {
@@ -92,7 +106,7 @@
             }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -149,8 +163,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "13afb2035052ada1",
@@ -256,53 +269,53 @@
       "bases:Create new base": false
     }
   },
-  "active": "c3caa029f60119a9",
+  "active": "e0192b0cb67fff6d",
   "lastOpenFiles": [
-    "4_Experiments/runs/ablation_studies/configs/C4_full_losses_baseline.yaml",
-    "4_Experiments/runs/ablation_studies/configs/C3_no_ibs_cls_loss.yaml",
-    "4_Experiments/runs/ablation_studies/configs/C2_no_contrastive_loss.yaml",
-    "4_Experiments/runs/ablation_studies/configs/C1_no_cross_attention.yaml",
-    "4_Experiments/runs/ablation_studies/configs/B4_full_ibs_baseline.yaml",
-    "4_Experiments/runs/ablation_studies/configs/B3_amplitude_only.yaml",
-    "4_Experiments/runs/ablation_studies/configs/B2_phase_only.yaml",
-    "4_Experiments/runs/ablation_studies/configs/B1_no_instance_norm.yaml",
-    "4_Experiments/runs/ablation_studies/configs/A5_full_model.yaml",
-    "4_Experiments/runs/ablation_studies/configs/A4_plus_ibs_robust.yaml",
-    "4_Experiments/runs/ablation_studies/configs/A3_plus_ibs_scalar.yaml",
+    "7_Analysis/matlab_scripts/analyze_eeg.asv",
+    "7_Analysis/figures/gradcam_matlab/gradcam_temporal_profile.csv",
+    "7_Analysis/figures/gradcam_matlab/gradcam_frequency_profile.csv",
+    "7_Analysis/figures/gradcam_matlab/gradcam_summary.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_3d_surface.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_band_stats.csv",
+    "7_Analysis/figures/gradcam_matlab/gradcam_band_statistics.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_temporal_profile.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_frequency_profile.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_difference_maps.png",
+    "7_Analysis/figures/gradcam_matlab/gradcam_heatmap_comparison.png",
+    "7_Analysis/figures/gradcam_matlab",
+    "7_Analysis/matlab_scripts/analyze_gradcam.m",
+    "7_Analysis/figures/attention_weights_matlab/attention_lag_profile.csv",
+    "7_Analysis/figures/attention_weights_matlab/attention_statistics.csv",
+    "7_Analysis/figures/attention_weights_matlab/attention_summary.png",
+    "7_Analysis/figures/attention_weights_matlab/attention_distribution.png",
+    "7_Analysis/figures/attention_weights_matlab/attention_timelag_analysis.png",
+    "7_Analysis/raw_result/dualEEG_old_eeg/attention_weights/mean_attention_map.csv",
+    "7_Analysis/figures/attention_weights_matlab",
+    "7_Analysis/matlab_scripts/analyze_attention_weights.m",
+    "0_Prompts/experiments/eeg.md",
+    "0_Prompts/visualization/eeg.md",
+    "0_Prompts/development/early_fusion_vit.md",
+    "0_Prompts/development/eeg.md",
+    "0_Prompts/development/late_fusion_vit.md",
+    "0_Prompts/experiments/early_fusion_vit.md",
     "0_Prompts/visualization/Gaze.md",
     "0_Prompts/writing/eeg.md",
-    "0_Prompts/experiments/eeg.md",
-    "0_Prompts/experiments/early_fusion_vit.md",
     "0_Prompts/writing/Gaze.md",
+    "Untitled.md",
+    "7_Analysis/PLAN_analyze_eeg.md",
+    "7_Analysis/analysis_list.md",
+    "CLAUDE.md",
     "8_Manuscript/2_Methods (LaTex).md",
-    "8_Manuscript/figures/fig3.EEGArch.png",
-    "8_Manuscript/figures/fig2.GazeArch.png",
     "0_Prompts/development/EEG_Refactor/總結檔.md",
     "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_refactor.md",
     "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_fix_v2.md",
     "0_Prompts/development/EEG_Refactor/new_dual_eeg/PLAN_dual_eeg_fix.md",
     "0_Prompts/development/EEG_Refactor/hyperEEG/PLAN_hypereeg.md",
-    "0_Prompts/development/eeg.md",
     "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_fix_v2.md",
     "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_fix.md",
     "0_Prompts/development/EEG_Refactor/PLAN_dual_eeg_refactor.md",
     "3_Models/backbones/PLAN_dual_eeg_fix_v2.md",
     "3_Models/backbones/PLAN_dual_eeg_fix.md",
-    "3_Models/backbones/PLAN_dual_eeg_refactor.md",
-    "plan.md",
-    "7_Analysis/analysis_list.md",
-    "4_Experiments/experiments_list.md",
-    "3_Models/backbones/PLAN_hypereeg.md",
-    "8_Manuscript/figures/fig5.GazeResult.png",
-    "fig5.GazeResult.png",
-    "CLAUDE.md",
-    "8_Manuscript/4_Discussion (LaTex).md",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_training_loss.png",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_pca_raincloud_early_concat.png",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_tsne_early_concat.png",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_conf_mat_early_concat.png",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_roc_comparison_all.png",
-    "7_Analysis/figures/entropy_analysis_matlab/fig_roc_late_fusion_(subtract).png",
-    "0_Prompts/development/early_fusion_vit.md"
+    "3_Models/backbones/PLAN_dual_eeg_refactor.md"
   ]
 }
