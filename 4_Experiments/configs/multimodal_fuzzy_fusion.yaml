@@ -1,0 +1,177 @@
+# =============================================================================
+# Multimodal Fuzzy Gating Fusion Configuration
+# Eye Gaze + EEG -> FuzzyGatingFusion -> Classification
+# =============================================================================
+
+# Model Configuration
+model:
+  num_classes: 3
+
+# =============================================================================
+# Gaze Encoder (EarlyFusionViT)
+# =============================================================================
+gaze_encoder:
+  model_name: "vit_base_patch16_224"
+  pretrained: true
+
+  # Early fusion mode: concat, add, subtract, subtract_abs, multiply
+  # - concat: Channel concatenation (6 channels) - default for early fusion
+  # - add: (img_a + img_b) / 2 -> common features
+  # - subtract: (img_a - img_b) / 2 -> directional difference
+  # - subtract_abs: |img_a - img_b| -> symmetric difference
+  # - multiply: normalized(img_a * img_b) -> overlapping emphasis
+  fusion_mode: "concat"
+
+  # Weight initialization strategy for 6-channel patch embedding (only for concat mode)
+  # - duplicate: Copy original 3-channel weights to both channel groups
+  # - average: Use averaged weights for second channel group
+  weight_init_strategy: "duplicate"
+
+  # Pretrained checkpoint (set to null to train from scratch)
+  checkpoint_path: "4_Experiments/runs/gaze_earlyfusion/concat/best_model.pt"
+
+  # Whether to freeze encoder during fusion training
+  freeze: false
+
+# =============================================================================
+# EEG Encoder (DualEEGTransformer)
+# =============================================================================
+eeg_encoder:
+  in_channels: 32
+  d_model: 256
+  num_layers: 6
+  num_heads: 8
+  d_ff: 1024
+  dropout: 0.1
+  conv_kernel_size: 25
+  conv_stride: 4
+  conv_layers: 2
+
+  # Spectrogram & IBS settings
+  use_spectrogram: true
+  use_robust_ibs: true
+  use_ibs: true
+  use_cross_attention: true
+
+  # Pretrained checkpoint (set to null to train from scratch)
+  checkpoint_path: "4_Experiments/runs/dualEEG/old_eeg/best_model.pt"
+
+  # Whether to freeze encoder during fusion training
+  freeze: false
+
+# =============================================================================
+# Fuzzy Gating Fusion Configuration
+# =============================================================================
+fusion:
+  # Ablation mode: full, no_temperature, no_fuzzification, fixed_weights
+  mode: "full"
+
+  # Numerical stability
+  eps_temp: 0.1
+
+  # Temperature regularization bounds
+  temp_reg_min: 0.5
+  temp_reg_max: 5.0
+
+# =============================================================================
+# Data Configuration
+# =============================================================================
+data:
+  metadata_path: "1_Data/metadata/complete_metadata.json"
+
+  # Image data (Eye Gaze heatmaps)
+  image_base_path: "G:/共用雲端硬碟/CNElab_林佳誼_Gaze/B.GazeImage/01.data/bgOn_heatmapOn_trajOn"
+  image_size: 224
+
+  # EEG data (same parameter names as train_art.py / dual_eeg_transformer.yaml)
+  eeg_base_path: "1_Data/datasets/EEGseg"
+  window_size: 1024            # Number of time points per window (4 seconds at 256 Hz)
+  stride: 512                  # Stride for sliding window (2 seconds overlap)
+  sampling_rate: 256           # EEG sampling rate (Hz)
+  filter_low: 1.0              # Low-pass filter frequency (Hz)
+  filter_high: 45.0            # High-pass filter frequency (Hz)
+  enable_preprocessing: false  # Enable EEG preprocessing (CAR, bandpass, z-score)
+
+  # Train/Val split
+  train_test_split: 0.2
+  random_seed: 42
+  max_samples: null  # Set to small number for quick testing (e.g., 100)
+
+  # Class mapping
+  class_names: ["Single", "Competition", "Cooperation"]
+  label2id:
+    "Single": 0
+    "Competition": 1
+    "Cooperation": 2
+  id2label:
+    0: "Single"
+    1: "Competition"
+    2: "Cooperation"
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  epochs: 50
+  batch_size: 16
+  num_workers: 4
+
+  # Learning rates (different for encoders and fusion)
+  encoder_learning_rate: 1.0e-5   # Lower LR for pretrained encoders
+  fusion_learning_rate: 1.0e-4    # Higher LR for fusion module
+  weight_decay: 0.01
+
+  # LR Scheduler
+  warmup_epochs: 3
+
+  # Loss weights
+  lambda_aux_img: 0.3    # Weight for auxiliary image loss
+  lambda_aux_eeg: 0.3    # Weight for auxiliary EEG loss
+  lambda_reg: 0.1        # Weight for temperature regularization
+
+  # Mixed precision
+  fp16: true
+
+  # Gradient clipping
+  max_grad_norm: 1.0
+
+# =============================================================================
+# Checkpoint Configuration
+# =============================================================================
+checkpoint:
+  # Note: actual save path = save_dir/{fusion_mode}/
+  save_dir: "4_Experiments/runs/multimodal_fuzzy_fusion"
+  save_every_epochs: 10
+  save_best: true
+  metric_for_best: "val_f1"
+  greater_is_better: true
+
+# =============================================================================
+# Resume Training
+# =============================================================================
+resume:
+  enabled: false
+  checkpoint_path: null
+
+# =============================================================================
+# Weights & Biases
+# =============================================================================
+wandb:
+  enabled: true
+  project: "Multimodal_Fusion"
+  # Note: actual run_name = {run_name}_{fusion_mode}_{timestamp}
+  run_name: "fuzzy_gating"
+  tags:
+    - "multimodal"
+    - "fuzzy-fusion"
+    - "early-fusion-vit"
+    - "gaze"
+    - "eeg"
+  notes: "Multimodal fusion with uncertainty-aware fuzzy gating (EarlyFusionViT-concat + DualEEGTransformer)"
+
+# =============================================================================
+# System
+# =============================================================================
+system:
+  seed: 42
+  device: "cuda"
